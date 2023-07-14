@@ -24,10 +24,6 @@ extern "C" {
 
 /* For userspace only */
 
-#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
-#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
-#endif
-
 #define UMWAIT(address, control, counter, uaddr32, old_val32)                  \
   ({                                                                           \
     _umonitor((void *)address);                                                \
@@ -64,19 +60,9 @@ unsigned long long _user_schedule_start(uint32_t timeout_tsc);
  */
 uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc);
 
-#ifndef _NO_UMWAIT
-uint32_t _user_reschedule_snoop(unsigned long long abs_timeout_tsc,
-                                const uint32_t *restrict uaddr32,
-                                uint32_t old_val32);
-#define _user_reschedule(abs_timeout_tsc, snoop_uaddr32, old_val32)            \
-  _user_reschedule_snoop(abs_timeout_tsc, snoop_uaddr32, old_val32)
-#else
-uint32_t _user_reschedule_async(unsigned long long abs_timeout_tsc,
-                                const uint32_t *restrict uaddr32,
-                                uint32_t old_val32);
-#define _user_reschedule(abs_timeout_tsc, uaddr32, old_val32)                  \
-  _user_reschedule_async(abs_timeout_tsc, uaddr32, old_val32)
-#endif
+uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
+                          const volatile uint32_t *restrict uaddr32,
+                          uint32_t old_val32);
 
 enum _USERSCHED_COND {
   USERSCHED_COND_TERM = 0,
@@ -116,8 +102,8 @@ enum _USERSCHED_COND {
  * relative timeout TSC (UINT32_MAX will be stored if indefinite)
  * @param abs_timeout_tsc (unsigned long long) Absolute timeout TSC (UINT64_MAX
  * if indefinite or 0 if immediate)
- * @param snoop_uaddr32 (const uint32_t *restrict) Address to snoop (if UMWAIT
- * support is present) and compare (will NOT be compared if NULL)
+ * @param snoop_uaddr32 (const volatile uint32_t *restrict) Address to snoop (if
+ * UMWAIT support is present) and compare (will NOT be compared if NULL)
  * @param old_val32 (uint32_t) Original value stored at non-NULL snoop_addr32
  * (timeout will NOT happen if *snoop_uaddr32 == old_val32)
  * @param cond_ptr (uint32_t *restrict) Pointer to conditional value for

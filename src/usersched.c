@@ -6,6 +6,10 @@
 
 #include <linux/perf_event.h>
 
+#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
+#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
+#endif
+
 unsigned long long _user_schedule_start(uint32_t timeout_tsc) {
   /* Do not return UINT32_MAX and 0 for valid absolute TSC value! */
 
@@ -41,15 +45,9 @@ uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc) {
   return (abs_timeout_tsc <= tsc) ? 0 : (abs_timeout_tsc - tsc);
 }
 
-#ifndef _NO_UMWAIT
-uint32_t _user_reschedule_snoop(unsigned long long abs_timeout_tsc,
-                                const uint32_t *restrict uaddr32,
-                                uint32_t old_val32) {
-#else
-uint32_t _user_reschedule_async(unsigned long long abs_timeout_tsc,
-                                const uint32_t *restrict uaddr32,
-                                uint32_t old_val32) {
-#endif
+uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
+                          const volatile uint32_t *restrict uaddr32,
+                          uint32_t old_val32) {
   /* Do not evaluate (*uaddr32 != old_val32 ) first! */
 
   /* Check immediate timeout. */
