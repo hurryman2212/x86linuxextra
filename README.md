@@ -3,3 +3,4 @@ This is a general-purpose library (and kernel objects) for developing on x86 Lin
 * Logger
 * Userspace scheduler
 * x86 i386/BMI extension wrappers
+* Helpers for kernel development

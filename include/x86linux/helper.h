@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef __KERNEL__
+
+/* For userspace only */
+
 #ifdef __cplusplus
 #include <cerrno>
 #include <cstdint>
@@ -16,9 +20,24 @@
 
 #include <x86intrin.h>
 
+#else
+
+/* For kernel only */
+
+#include <linux/version.h>
+
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define __filename__                                                           \
+  (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
+                                    : __FILE__)
+
+#define ADDR_CAST(val) (void *)(uintptr_t)val
+#define VAL_CAST(val) (uintptr_t) val
 
 #ifndef __KERNEL__
 
@@ -154,10 +173,6 @@ extern int _suppress_log;
 #define ENABLE_LOG() (void)(_suppress_log = 0)
 #define DISABLE_LOG() (void)(_suppress_log = 1)
 
-#define __filename__                                                           \
-  (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
-                                    : __FILE__)
-
 #define _LOG_MSG(filename, line, func, postfix, format, ...)                   \
   "[tid %d] %s: %s:%d: %s: " format postfix, gettid(),                         \
       program_invocation_short_name, filename, line, func, ##__VA_ARGS__
@@ -268,6 +283,36 @@ int _log_backtrace(const char *filename, int line, const char *func);
 #else
 
 /* For kernel only */
+
+#define ERROR_CODE(ret) (int)(uintptr_t)(IS_ERR(ret) ? ret : 0)
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
+#define msi_desc_to_index(msi_desc) (msi_desc->msi_index)
+#else
+#define msi_desc_to_index(msi_desc) (msi_desc->msi_attrib.entry_nr)
+#endif
+
+enum module_destruct_level { MODULE_DATA, MODULE_CLS, MODULE_DRIVER };
+
+enum pci_destruct_level {
+  PCI_DATA,
+  PCI_PDEV,
+  PCI_REGION,
+  PCI_CHRDEV,
+  PCI_CDEV,
+  PCI_DEV,
+  PCI_REG,
+  PCI_DEVM,
+  PCI_IRQ
+};
+
+#define _KLOG_MSG(filename, line, func, fmt, ...)                              \
+  "[tid %d] %s: %s:%d: %s: " fmt, task_pid_vnr(current),                       \
+      module_name(THIS_MODULE), filename, line, func, ##__VA_ARGS__
+#define _KLOG_MSG_TMPL(fmt, ...)                                               \
+  _KLOG_MSG(__filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+
+#define klog(level, fmt, ...) printk(level _KLOG_MSG_TMPL(fmt, ##__VA_ARGS__))
 
 #endif
 

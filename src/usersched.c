@@ -1,3 +1,7 @@
+#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
+#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
+#endif
+
 #include "x86linux/helper.h"
 
 #include <syscall.h>
@@ -5,10 +9,6 @@
 #include <sys/mman.h>
 
 #include <linux/perf_event.h>
-
-#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
-#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
-#endif
 
 unsigned long long _user_schedule_start(uint32_t timeout_tsc) {
   /* Do not return UINT32_MAX and 0 for valid absolute TSC value! */
