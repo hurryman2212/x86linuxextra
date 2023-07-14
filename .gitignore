@@ -1,0 +1,14 @@
+*
+!.gitignore
+!.gitmodules
+
+!LICENSE
+!*.md
+
+# CMake
+!CMakeLists.txt
+
+!src/
+!src/**
+!include/
+!include/**
