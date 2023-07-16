@@ -307,8 +307,8 @@ enum pci_destruct_level {
 };
 
 #define _KLOG_MSG(filename, line, func, fmt, ...)                              \
-  "[tid %d] %s: %s:%d: %s: " fmt, task_pid_vnr(current),                       \
-      module_name(THIS_MODULE), filename, line, func, ##__VA_ARGS__
+  "%s[%d]: %s:%d: %s: " fmt, module_name(THIS_MODULE), task_pid_vnr(current),  \
+      filename, line, func, ##__VA_ARGS__
 #define _KLOG_MSG_TMPL(fmt, ...)                                               \
   _KLOG_MSG(__filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
