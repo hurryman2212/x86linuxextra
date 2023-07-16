@@ -152,9 +152,10 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
 
     /* Check UMWAIT support. */
     eax = 7;
+    ecx = 0;
     asm volatile("cpuid"
                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                 : "a"(eax));
+                 : "a"(eax), "c"(ecx));
     usersched_support_umwait = !!(ecx & (1 << 5));
 
     if (usersched_support_umwait)

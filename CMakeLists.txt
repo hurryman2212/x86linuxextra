@@ -38,7 +38,8 @@ add_link_options($<$<COMPILE_LANGUAGE:CXX>:-rdynamic>)
 set(C_FLAGS_RELEASE
     "-DNDEBUG \
   -march=native \
-  -O2")
+  -O2 \
+  -ftree-vectorize")
 set(CXX_FLAGS_RELEASE ${C_FLAGS_RELEASE})
 set(C_FLAGS_DEBUG "-Og")
 set(CXX_FLAGS_DEBUG ${C_FLAGS_DEBUG})
