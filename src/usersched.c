@@ -144,9 +144,9 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
   const char *env_no_umwait = getenv("USERSCHED_NO_UMWAIT");
   if (env_no_umwait) {
-    usersched_support_umwait = 0;
     log_warn("USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
              env_no_umwait);
+    usersched_support_umwait = 0;
   } else {
 #endif
 
