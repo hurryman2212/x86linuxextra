@@ -134,3 +134,6 @@ add_custom_target(
   uninstall
   COMMAND ${UNINSTALL_SCRIPT_CMD}
   DEPENDS install_manifest.txt)
+
+# Run ldconfig
+install(CODE "execute_process (COMMAND ldconfig)")
