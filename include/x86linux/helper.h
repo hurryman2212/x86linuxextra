@@ -1,5 +1,7 @@
 #pragma once
 
+/* Common */
+
 #ifndef __KERNEL__
 
 /* For userspace only */
@@ -24,6 +26,8 @@
 
 /* For kernel only */
 
+#include <linux/pci.h>
+#include <linux/types.h>
 #include <linux/version.h>
 
 #endif
@@ -32,6 +36,11 @@
 extern "C" {
 #endif
 
+/* Common */
+
+#define restrict __restrict__
+#define __restrict __restrict__
+
 #define __filename__                                                           \
   (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
                                     : __FILE__)
@@ -39,9 +48,33 @@ extern "C" {
 #define ADDR_CAST(val) (void *)(uintptr_t)val
 #define VAL_CAST(val) (uintptr_t) val
 
+typedef uint64_t bitset_t;
+
+int x86_test_bit(const bitset_t *restrict bitset, uint32_t idx);
+
+int x86_set_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
+int x86_unset_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
+int x86_set_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
+int x86_unset_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
+
+int64_t x86_search_lowest_bit(const bitset_t *restrict bitset,
+                              uint32_t start_idx, uint32_t last_idx);
+int64_t x86_consume_lowest_bit_nonatomic(bitset_t *restrict bitset,
+                                         uint32_t start_idx, uint32_t last_idx);
+int64_t x86_search_lowest_common_bit(const bitset_t *restrict bitset,
+                                     const bitset_t *restrict bitset2,
+                                     uint32_t start_idx, uint32_t last_idx);
+
 #ifndef __KERNEL__
 
 /* For userspace only */
+
+#define barrier() __asm__ __volatile__("" : : : "memory")
+
+/* unlikely() should be prioritized over likely()! */
+#define unlikely(expr) __builtin_expect(!!(expr), 0)
+/* Use of likely() is discouraged! Try to use unlikely(). */
+#define likely(expr) __builtin_expect(!!(expr), 1)
 
 #define UMWAIT(address, control, counter, uaddr32, old_val32)                  \
   ({                                                                           \
@@ -144,30 +177,6 @@ enum _USERSCHED_COND {
     ;                                                                          \
   *rel_timeout_tsc_ptr = _user_update_timeout_tsc(abs_timeout_tsc);            \
   (void)0
-
-#define barrier() __asm__ __volatile__("" : : : "memory")
-
-/* unlikely() should be prioritized over likely()! */
-#define unlikely(expr) __builtin_expect(!!(expr), 0)
-/* Use of likely() is discouraged! Try to use unlikely(). */
-#define likely(expr) __builtin_expect(!!(expr), 1)
-
-typedef uint64_t bitset_t;
-
-int test_bit(const bitset_t *restrict bitset, uint32_t idx);
-
-int set_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
-int unset_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
-int set_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
-int unset_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
-
-int64_t search_lowest_bit(const bitset_t *restrict bitset, uint32_t start_idx,
-                          uint32_t last_idx);
-int64_t consume_lowest_bit_nonatomic(bitset_t *restrict bitset,
-                                     uint32_t start_idx, uint32_t last_idx);
-int64_t search_lowest_common_bit(const bitset_t *restrict bitset,
-                                 const bitset_t *restrict bitset2,
-                                 uint32_t start_idx, uint32_t last_idx);
 
 extern int _suppress_log;
 #define ENABLE_LOG() (void)(_suppress_log = 0)
@@ -284,7 +293,11 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 /* For kernel only */
 
-#define ERROR_CODE(ret) (int)(uintptr_t)(IS_ERR(ret) ? ret : 0)
+#define ERROR_CODE(ret)                                                        \
+  (int)(uintptr_t)({                                                           \
+    typeof(ret) _ret = ret;                                                    \
+    IS_ERR(_ret) ? _ret : 0;                                                   \
+  })
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
 #define msi_desc_to_index(msi_desc) (msi_desc->msi_index)
@@ -292,9 +305,16 @@ int _log_backtrace(const char *filename, int line, const char *func);
 #define msi_desc_to_index(msi_desc) (msi_desc->msi_attrib.entry_nr)
 #endif
 
-enum module_destruct_level { MODULE_DATA, MODULE_CLS, MODULE_DRIVER };
+enum module_destruct_level {
+  MODULE_STRUCT,
+  MODULE_DATA,
+  MODULE_CLS,
+  MODULE_DRIVER,
+  MODULE_FULL = MODULE_DRIVER,
+};
 
 enum pci_destruct_level {
+  PCI_STRUCT,
   PCI_DATA,
   PCI_PDEV,
   PCI_REGION,
@@ -303,16 +323,34 @@ enum pci_destruct_level {
   PCI_DEV,
   PCI_REG,
   PCI_DEVM,
-  PCI_IRQ
+  PCI_IRQ,
+  PCI_FULL = PCI_IRQ,
 };
 
+#ifdef MODULE
+#define _KLOG_MSG(filename, line, func, fmt, ...)                              \
+  "%s[%d]: %s:%d: %s: " fmt "\n", THIS_MODULE->name, task_pid_vnr(current),    \
+      filename, line, func, ##__VA_ARGS__
+#else
 #define _KLOG_MSG(filename, line, func, fmt, ...)                              \
   "%s[%d]: %s:%d: %s: " fmt "\n", module_name(THIS_MODULE),                    \
       task_pid_vnr(current), filename, line, func, ##__VA_ARGS__
+#endif
 #define _KLOG_MSG_TMPL(fmt, ...)                                               \
   _KLOG_MSG(__filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
 #define klog(level, fmt, ...) printk(level _KLOG_MSG_TMPL(fmt, ##__VA_ARGS__))
+
+#define _KLOG_DEV_MSG(pdev, filename, line, func, fmt, ...)                    \
+  "%s[%d] %04x:%02hhx:%02x.%x: %s:%d: %s: " fmt "\n", THIS_MODULE->name,       \
+      task_pid_vnr(current), pci_domain_nr(pdev->bus), pdev->bus->number,      \
+      PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), filename, line, func,      \
+      ##__VA_ARGS__
+#define _KLOG_DEV_MSG_TMPL(pdev, fmt, ...)                                     \
+  _KLOG_DEV_MSG(pdev, __filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+
+#define klog_dev(pdev, level, fmt, ...)                                        \
+  printk(level _KLOG_DEV_MSG_TMPL(pdev, fmt, ##__VA_ARGS__))
 
 #endif
 
