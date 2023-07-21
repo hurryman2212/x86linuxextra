@@ -299,6 +299,10 @@ int _log_backtrace(const char *filename, int line, const char *func);
     IS_ERR(_ret) ? _ret : 0;                                                   \
   })
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 4, 0)
+#define class_create(owner, name) class_create(name)
+#endif
+
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
 #define msi_desc_to_index(msi_desc) (msi_desc->msi_index)
 #else
