@@ -192,7 +192,7 @@ extern int _suppress_log;
 
 #define LOG_MSG(format, ...) _LOG_MSG_TMPL("\n", format, ##__VA_ARGS__)
 #define LOG_DEBUG_MSG(format, ...)                                             \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[2;0mDEBUG: " format, ##__VA_ARGS__)
+  _LOG_MSG_TMPL("\e[0m\n", "\e[2;37mDEBUG: " format, ##__VA_ARGS__)
 #define LOG_INFO_MSG(format, ...)                                              \
   _LOG_MSG_TMPL("\e[0m\n", "\e[34mINFO: " format, ##__VA_ARGS__)
 #define LOG_WARN_MSG(format, ...)                                              \
@@ -275,7 +275,7 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 #ifndef NDEBUG
 #define log_debug(format, ...)                                                 \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_DEBUG_MSG(format)))
+  (unlikely(_suppress_log) ? 0 : _log(LOG_DEBUG_MSG(format, ##__VA_ARGS__)))
 #define log_debug_perror(format, ...)                                          \
   (!strcmp(format, "")                                                         \
        ? log_debug("%s", strerror(errno))                                      \
