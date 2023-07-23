@@ -173,58 +173,80 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
   }
 #endif
 
-  /**
-   * Check Invariant TSC.
-   *
-   * If not available, give up.
-   */
-  eax = 0x80000007;
-  asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(eax));
-  if (!(edx & (1 << 8))) {
-    log("No invariant TSC support -> Giving up...");
-    exit(EXIT_FAILURE);
+  const char *env_override_tsc_1us = getenv("USERSCHED_OVERRIDE_TSC_1US");
+  if (env_override_tsc_1us) {
+    usersched_tsc_1us = atoi(env_override_tsc_1us);
+    log_warn("USERSCHED_OVERRIDE_TSC_1US=%s -> Overriding TSC value "
+             "representing 1us on this system to %u ticks...",
+             env_override_tsc_1us, usersched_tsc_1us);
   }
 
-  int fd = syscall(SYS_perf_event_open, &pe, 0, -1, -1, 0);
-  if (fd < 0)
-    log_perror_abort("perf_event_open");
+  else {
+    /**
+     * Check Invariant TSC.
+     *
+     * If not available, give up.
+     */
+    eax = 0x80000007;
+    asm volatile("cpuid"
+                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                 : "a"(eax));
+    if (!(edx & (1 << 8))) {
+      log("No invariant TSC support -> Giving up...");
+      exit(EXIT_FAILURE);
+    }
 
-  ssize_t page_size = sysconf(_SC_PAGESIZE);
-  if (page_size == -1)
-    log_perror_abort("sysconf");
+    /**
+     * Check `perf_event_open` system call support.
+     *
+     * If not available, give up.
+     */
+    int fd = syscall(SYS_perf_event_open, &pe, 0, -1, -1, 0);
+    if (fd < 0)
+      log_perror_abort("perf_event_open");
 
-  struct perf_event_mmap_page *restrict pc =
-      mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd, 0);
-  if (pc == MAP_FAILED)
-    log_perror_abort("mmap");
+    ssize_t page_size = sysconf(_SC_PAGESIZE);
+    if (page_size == -1)
+      log_perror_abort("sysconf");
 
-  if (!pc->cap_user_time)
-    log_abort("The system doesn't support user time!");
+    struct perf_event_mmap_page *restrict pc =
+        mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (pc == MAP_FAILED)
+      log_perror_abort("mmap");
 
-  unsigned int time_mult = pc->time_mult, time_shift = pc->time_shift;
+    /**
+     * Check user time support.
+     *
+     * If not available, give up.
+     */
+    if (!pc->cap_user_time)
+      log_abort("The system doesn't support user time!");
 
-  if (munmap(pc, page_size))
-    log_perror_abort("munmap");
-  if (close(fd))
-    log_perror_abort("close");
+    unsigned int time_mult = pc->time_mult, time_shift = pc->time_shift;
 
-  /* Dumb method */
-  unsigned long long tsc_start, tsc_end;
-  unsigned int tsc_aux_start, tsc_aux_end;
-  do {
-    tsc_start = __rdtscp(&tsc_aux_start);
-    usleep(USERSCHED_TSC_1US_SLEEP_US);
-    tsc_end = __rdtscp(&tsc_aux_end);
-    /* Check core migration. */
-  } while ((tsc_aux_end != tsc_aux_start));
-  __uint128_t tmp_tsc_ns;
-  if (unlikely(tsc_end <= tsc_start))
-    /* TSC overflow */
-    tmp_tsc_ns = tsc_end + (UINT64_MAX - tsc_start);
-  else
-    tmp_tsc_ns = tsc_end - tsc_start;
-  tmp_tsc_ns *= time_mult;
-  tmp_tsc_ns >>= time_shift;
+    if (munmap(pc, page_size))
+      log_perror_abort("munmap");
+    if (close(fd))
+      log_perror_abort("close");
 
-  usersched_tsc_1us = (tsc_end - tsc_start) / (tmp_tsc_ns / 1000);
+    /* Dumb method */
+    unsigned long long tsc_start, tsc_end;
+    unsigned int tsc_aux_start, tsc_aux_end;
+    do {
+      tsc_start = __rdtscp(&tsc_aux_start);
+      usleep(USERSCHED_TSC_1US_SLEEP_US);
+      tsc_end = __rdtscp(&tsc_aux_end);
+      /* Check core migration. */
+    } while ((tsc_aux_end != tsc_aux_start));
+    __uint128_t tmp_tsc_ns;
+    if (unlikely(tsc_end <= tsc_start))
+      /* TSC overflow */
+      tmp_tsc_ns = tsc_end + (UINT64_MAX - tsc_start);
+    else
+      tmp_tsc_ns = tsc_end - tsc_start;
+    tmp_tsc_ns *= time_mult;
+    tmp_tsc_ns >>= time_shift;
+
+    usersched_tsc_1us = (tsc_end - tsc_start) / (tmp_tsc_ns / 1000);
+  }
 }
