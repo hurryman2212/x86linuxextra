@@ -247,31 +247,26 @@ int _log_backtrace(const char *filename, int line, const char *func);
   abort()
 
 #define log_abort(format, ...)                                                 \
-  {                                                                            \
+  ({                                                                           \
     !strcmp(format, "") ? _log_fatal("abort")                                  \
                         : _log_fatal(format, ##__VA_ARGS__);                   \
     _log_abort();                                                              \
-  }                                                                            \
-  (void)0
+  })
 #define log_perror_abort(format, ...)                                          \
-  {                                                                            \
+  ({                                                                           \
     !strcmp(format, "")                                                        \
         ? _log_fatal("%s", strerror(errno))                                    \
         : _log_fatal(format ": %s", ##__VA_ARGS__, strerror(errno));           \
     _log_abort();                                                              \
-  }                                                                            \
-  (void)0
+  })
 
 #define log_assert(expression)                                                 \
-  if (!(expression)) {                                                         \
-    _log(LOG_ASSERT_MSG("\e[0m\n", expression));                               \
-    _log_abort();                                                              \
-  }                                                                            \
-  (void)0
+  ({                                                                           \
+    !(expression) ? log(LOG_ASSERT_MSG("\e[0m\n", expression)) : _log_abort(); \
+    (void)0;                                                                   \
+  })
 #define log_perror_assert(expression)                                          \
-  if (!(expression))                                                           \
-    log_perror_abort(_ASSERT_MSG(expression));                                 \
-  (void)0
+  (!(expression) ? log_perror_abort(_ASSERT_MSG(expression)) : (void)0)
 
 #ifndef NDEBUG
 #define log_debug(format, ...)                                                 \
