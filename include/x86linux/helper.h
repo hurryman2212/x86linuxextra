@@ -48,21 +48,23 @@ extern "C" {
 #define ADDR_CAST(val) (void *)(uintptr_t)val
 #define VAL_CAST(val) (uintptr_t) val
 
-typedef uint64_t bitset_t;
+typedef uint64_t bitset64_t;
+#define BITSET64_ARR_LEN(nr_bits)                                              \
+  (nr_bits / (8 * sizeof(bitset64_t)) + !!(nr_bits % (8 + sizeof(bitset64_t))))
 
-int x86_test_bit(const bitset_t *restrict bitset, uint32_t idx);
+int x86_test_bit(const bitset64_t *restrict bitset, uint32_t idx);
 
-int x86_set_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
-int x86_unset_bit_nonatomic(bitset_t *restrict bitset, uint32_t idx);
-int x86_set_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
-int x86_unset_bit_atomic(bitset_t *restrict bitset, uint32_t idx);
+int x86_set_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx);
+int x86_unset_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx);
+int x86_set_bit_atomic(bitset64_t *restrict bitset, uint32_t idx);
+int x86_unset_bit_atomic(bitset64_t *restrict bitset, uint32_t idx);
 
-int64_t x86_search_lowest_bit(const bitset_t *restrict bitset,
+int64_t x86_search_lowest_bit(const bitset64_t *restrict bitset,
                               uint32_t start_idx, uint32_t last_idx);
-int64_t x86_consume_lowest_bit_nonatomic(bitset_t *restrict bitset,
+int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *restrict bitset,
                                          uint32_t start_idx, uint32_t last_idx);
-int64_t x86_search_lowest_common_bit(const bitset_t *restrict bitset,
-                                     const bitset_t *restrict bitset2,
+int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
+                                     const bitset64_t *restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx);
 
 #ifndef __KERNEL__
