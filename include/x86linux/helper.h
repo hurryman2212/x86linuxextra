@@ -78,6 +78,11 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
 /* Use of likely() is discouraged! Try to use unlikely(). */
 #define likely(expr) __builtin_expect(!!(expr), 1)
 
+#define align_size(size, alignment)                                            \
+  ((((size) / (alignment)) + !!((size) % (alignment))) * (alignment))
+#define align_pow2_size(size, alignment_pow2)                                  \
+  (((size) + ((alignment_pow2)-1)) & ~((alignment_pow2)-1))
+
 #define UMWAIT(address, control, counter, uaddr32, old_val32)                  \
   ({                                                                           \
     _umonitor((void *)address);                                                \
