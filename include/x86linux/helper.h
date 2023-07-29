@@ -265,11 +265,13 @@ int _log_backtrace(const char *filename, int line, const char *func);
     _log_abort();                                                              \
   })
 
-#define log_assert(expression)                                                 \
+#define _log_assert(expression)                                                \
   ({                                                                           \
-    !(expression) ? log(LOG_ASSERT_MSG("\e[0m\n", expression)) : _log_abort(); \
-    (void)0;                                                                   \
+    log(LOG_ASSERT_MSG("\e[0m\n", expression));                                \
+    _log_abort();                                                              \
   })
+#define log_assert(expression)                                                 \
+  (!(expression) ? _log_assert(expression) : (void)0)
 #define log_perror_assert(expression)                                          \
   (!(expression) ? log_perror_abort(_ASSERT_MSG(expression)) : (void)0)
 
