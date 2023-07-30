@@ -249,4 +249,6 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
 
     usersched_tsc_1us = (tsc_end - tsc_start) / (tmp_tsc_ns / 1000);
   }
+
+  log_info("usersched_tsc_1us = %u", usersched_tsc_1us);
 }
