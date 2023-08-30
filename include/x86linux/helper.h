@@ -267,7 +267,7 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 #define _log_assert(expression)                                                \
   ({                                                                           \
-    log(LOG_ASSERT_MSG("\e[0m\n", expression));                                \
+    log(LOG_ASSERT_MSG("\e[0m", expression));                                  \
     _log_abort();                                                              \
   })
 #define log_assert(expression)                                                 \
