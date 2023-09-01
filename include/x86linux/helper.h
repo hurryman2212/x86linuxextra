@@ -204,12 +204,10 @@ extern int _suppress_log;
   _LOG_MSG_TMPL("\e[0m\n", "\e[33mWARNING: " format, ##__VA_ARGS__)
 #define LOG_ERR_MSG(format, ...)                                               \
   _LOG_MSG_TMPL("\e[0m\n", "\e[31mERROR: " format, ##__VA_ARGS__)
-
-#define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
 #define LOG_FATAL_MSG(format, ...)                                             \
   _LOG_MSG_TMPL("\e[0m\n", "\e[1;31mFATAL: " format, ##__VA_ARGS__)
-#define LOG_ASSERT_MSG(postfix, expression)                                    \
-  _LOG_MSG_TMPL(postfix, "\e[1;31m" _ASSERT_MSG(expression))
+
+#define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
 
 #define _log(message, ...) dprintf(STDERR_FILENO, message)
 
@@ -267,7 +265,7 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 #define _log_assert(expression)                                                \
   ({                                                                           \
-    log(LOG_ASSERT_MSG("\e[0m", expression));                                  \
+    _log_fatal(_ASSERT_MSG(expression));                                       \
     _log_abort();                                                              \
   })
 #define log_assert(expression)                                                 \
