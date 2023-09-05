@@ -286,8 +286,8 @@ int _log_backtrace(const char *filename, int line, const char *func);
 #else
 #define log_debug(format, ...)
 #define log_debug_perror(format, ...)
-#define log_debug_assert(expression)
-#define log_debug_perror_assert(expression)
+#define log_debug_assert(expression) (void)(expression)
+#define log_debug_perror_assert(expression) (void)(expression)
 #define log_debug_backtrace()
 #endif
 
