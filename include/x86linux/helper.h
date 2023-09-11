@@ -48,6 +48,22 @@ extern "C" {
 #define ADDR_CAST(val) (void *)(uintptr_t)val
 #define VAL_CAST(val) (uintptr_t) val
 
+#define READ_FEASIBLE_BYTES(pos_r, save_pos_w, pos_end, req_size)              \
+  ((pos_r <= save_pos_w)                                                       \
+       ? (((save_pos_w - pos_r) < req_size) ? (save_pos_w - pos_r) : req_size) \
+   : ((pos_end - pos_r) < req_size) ? pos_end - pos_r                          \
+                                    : req_size)
+#define WRITE_FEASIBLE_BYTES(save_pos_r, pos_w, pos_end, req_size)             \
+  ((pos_w < save_pos_r)                                                        \
+       ? (((save_pos_r - pos_w) < req_size) ? (save_pos_r - pos_w) : req_size) \
+   : ((pos_end - pos_w) < req_size) ? pos_end - pos_w                          \
+                                    : req_size)
+
+#define align_size(size, alignment)                                            \
+  ((((size) / (alignment)) + !!((size) % (alignment))) * (alignment))
+#define align_pow2_size(size, alignment_pow2)                                  \
+  (((size) + ((alignment_pow2)-1)) & ~((alignment_pow2)-1))
+
 typedef uint64_t bitset64_t;
 #define BITSET64_ARR_LEN(nr_bits)                                              \
   (nr_bits / (8 * sizeof(bitset64_t)) + !!(nr_bits % (8 + sizeof(bitset64_t))))
@@ -77,11 +93,6 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
 /* Use of likely() is discouraged! Try to use unlikely(). */
 #define likely(expr) __builtin_expect(!!(expr), 1)
-
-#define align_size(size, alignment)                                            \
-  ((((size) / (alignment)) + !!((size) % (alignment))) * (alignment))
-#define align_pow2_size(size, alignment_pow2)                                  \
-  (((size) + ((alignment_pow2)-1)) & ~((alignment_pow2)-1))
 
 #define UMWAIT(address, control, counter, uaddr32, old_val32)                  \
   ({                                                                           \
