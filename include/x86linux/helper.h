@@ -41,10 +41,6 @@ extern "C" {
 #define restrict __restrict__
 #define __restrict __restrict__
 
-#define __filename__                                                           \
-  (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
-                                    : __FILE__)
-
 #define ADDR_CAST(val) (void *)(uintptr_t)val
 #define VAL_CAST(val) (uintptr_t) val
 
@@ -86,6 +82,9 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
 #ifndef __KERNEL__
 
 /* For userspace only */
+
+#define __filename__                                                           \
+  (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
 #define barrier() __asm__ __volatile__("" : : : "memory")
 
@@ -305,6 +304,10 @@ int _log_backtrace(const char *filename, int line, const char *func);
 #else
 
 /* For kernel only */
+
+#define __filename__                                                           \
+  (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
+                                    : __FILE__)
 
 #define ERROR_CODE(ret)                                                        \
   (int)(uintptr_t)({                                                           \

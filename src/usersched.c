@@ -56,7 +56,7 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
 
   do {
     unsigned long long tsc;
-    int tsc_overflow;
+    int tsc_overflow = 0;
     int is_indefinite = abs_timeout_tsc == UINT64_MAX;
 
     /* Check non-indefinite timeout */
