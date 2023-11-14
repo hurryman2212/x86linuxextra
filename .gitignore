@@ -1,14 +1,22 @@
 *
 !.gitignore
 !.gitmodules
+!.gitkeep
 
 !LICENSE
 !*.md
 
-# CMake
 !CMakeLists.txt
 
 !src/
-!src/**
+!src/**/
+!src/**.c
+!src/**.cc
+!src/**.cpp
+!src/**.cxx
 !include/
-!include/**
+!include/**/
+!include/**.h
+!include/**.hh
+!include/**.hpp
+!include/**.hxx

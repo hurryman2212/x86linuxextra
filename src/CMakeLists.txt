@@ -1,8 +1,8 @@
 # libx86linuxextra
 project(libx86linuxextra)
 
-# Enlist source from current directory
-file(GLOB sources *.c *.cc *.cpp *.cxx)
+# Enlist source from current directory recursively
+file(GLOB_RECURSE sources *.c *.cc *.cpp *.cxx)
 
 # Add target library to build with source
 add_library(${PROJECT_NAME} SHARED ${sources})
@@ -35,24 +35,33 @@ target_compile_options(${PROJECT_NAME}
                        PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM}>)
 target_compile_options(${PROJECT_NAME}
                        PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM}>)
-target_link_options(${PROJECT_NAME} PUBLIC
-                    $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM}>)
-target_link_options(${PROJECT_NAME} PUBLIC
-                    $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM}>)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_options(${PROJECT_NAME}.lto
                          PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_LTO}>)
   target_compile_options(${PROJECT_NAME}.lto
                          PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_LTO}>)
+
+  # Set link option to strip out all debug & symbol information.
+  target_link_options(${PROJECT_NAME} PUBLIC
+                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM} -Wl,-s>)
+  target_link_options(${PROJECT_NAME} PUBLIC
+                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM} -Wl,-s>)
   target_link_options(${PROJECT_NAME}.lto PUBLIC
-                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_LTO}>)
+                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_LTO} -Wl,-s>)
   target_link_options(${PROJECT_NAME}.lto PUBLIC
-                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_LTO}>)
+                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_LTO} -Wl,-s>)
 else()
+
   target_compile_options(${PROJECT_NAME}.dbg
                          PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_DBG}>)
   target_compile_options(${PROJECT_NAME}.dbg
                          PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_DBG}>)
+
+  # Set link option to maintain all debug & symbol information.
+  target_link_options(${PROJECT_NAME} PUBLIC
+                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM}>)
+  target_link_options(${PROJECT_NAME} PUBLIC
+                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM}>)
   target_link_options(${PROJECT_NAME}.dbg PUBLIC
                       $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_DBG}>)
   target_link_options(${PROJECT_NAME}.dbg PUBLIC
