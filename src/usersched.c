@@ -119,7 +119,8 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
       }
 #endif
-    }
+    } else if (is_indefinite)
+      return 1;
   } while (uaddr32);
 
   return 1;
@@ -128,13 +129,22 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
 uint32_t usersched_tsc_1us = 0;
 int usersched_support_umwait = -1;
 /* Setup global variables for 1us TSC value and UMWAIT support. */
-static __attribute__((constructor)) void _usersched_constructor(void) {
-  struct perf_event_attr pe = {.type = PERF_TYPE_HARDWARE,
-                               .size = sizeof(struct perf_event_attr),
-                               .config = PERF_COUNT_HW_INSTRUCTIONS,
-                               .disabled = 1,
-                               .exclude_kernel = 1,
-                               .exclude_hv = 1};
+void _usersched_init(void) {
+  struct perf_event_attr pe = {
+      .type = PERF_TYPE_HARDWARE,
+      .size = sizeof(struct perf_event_attr),
+      .config = PERF_COUNT_HW_INSTRUCTIONS,
+      .disabled = 1,
+
+      .exclude_user = 1,
+      .exclude_kernel = 1,
+      .exclude_hv = 1,
+      .exclude_idle = 1,
+      .exclude_host = 1,
+      .exclude_guest = 1,
+      .exclude_callchain_kernel = 1,
+      .exclude_callchain_user = 1,
+  };
   uint32_t eax, ebx, ecx, edx;
 
 #ifdef _NO_UMWAIT
@@ -144,7 +154,7 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
   const char *env_no_umwait = getenv("USERSCHED_NO_UMWAIT");
   if (env_no_umwait) {
-    log_warn("USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
+    log_warn("env: USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
              env_no_umwait);
     usersched_support_umwait = 0;
   } else {
@@ -176,7 +186,7 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
   const char *env_override_tsc_1us = getenv("USERSCHED_OVERRIDE_TSC_1US");
   if (env_override_tsc_1us) {
     usersched_tsc_1us = atoi(env_override_tsc_1us);
-    log_warn("USERSCHED_OVERRIDE_TSC_1US=%s -> Overriding TSC value "
+    log_warn("env: USERSCHED_OVERRIDE_TSC_1US=%s -> Overriding TSC value "
              "representing 1us on this system to %u ticks...",
              env_override_tsc_1us, usersched_tsc_1us);
   }
@@ -191,10 +201,8 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
     asm volatile("cpuid"
                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
                  : "a"(eax));
-    if (!(edx & (1 << 8))) {
-      log("No invariant TSC support -> Giving up...");
-      exit(EXIT_FAILURE);
-    }
+    if (!(edx & (1 << 8)))
+      log_abort("No invariant TSC support! -> Giving up...");
 
     /**
      * Check `perf_event_open` system call support.
@@ -250,5 +258,5 @@ static __attribute__((constructor)) void _usersched_constructor(void) {
     usersched_tsc_1us = (tsc_end - tsc_start) / (tmp_tsc_ns / 1000);
   }
 
-  log_info("usersched_tsc_1us = %u", usersched_tsc_1us);
+  log_info("usersched_tsc_1us <- %u", usersched_tsc_1us);
 }

@@ -34,7 +34,7 @@ add_link_options($<$<COMPILE_LANGUAGE:CXX>:-rdynamic>)
 # Override `Debug` and `Release` C/C++ build options
 set(C_FLAGS_RELEASE "-DNDEBUG -march=native -O2")
 set(CXX_FLAGS_RELEASE ${C_FLAGS_RELEASE})
-set(C_FLAGS_DEBUG "-O0")
+set(C_FLAGS_DEBUG "-Og")
 set(CXX_FLAGS_DEBUG ${C_FLAGS_DEBUG})
 
 # Handle build type
@@ -56,7 +56,7 @@ set(CXX_FLAGS_LTO ${C_FLAGS_LTO})
 # Set target debug option for gdb if the compiler is gcc, or lldb if clang
 set(LLDB_FLAGS_DBG -glldb -shared-libasan)
 set(GDB_FLAGS_DBG -ggdb3)
-set(GENERIC_FLAGS_DBG -g3 -fsanitize=address,undefined)
+set(GENERIC_FLAGS_DBG -g3 -fsanitize=address,undefined -fno-omit-frame-pointer)
 if(CMAKE_C_COMPILER STREQUAL "clang")
   set(C_FLAGS_DBG ${LLDB_FLAGS_DBG})
 elseif(CMAKE_C_COMPILER STREQUAL "gcc")
