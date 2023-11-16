@@ -1,14 +1,12 @@
 #include "x86linux/helper.h"
 
-#include "usersched.h"
-
 static __attribute__((constructor(101))) void _x86linuxextra_init(void) {
   /* Suppress logging first if required. */
 
-  const char *env_suppress_log = getenv("X86LINUX_SUPPRESS_LOG");
-  if (env_suppress_log)
+  const char *env_log_suppress = getenv("LOG_SUPPRESS");
+  if (env_log_suppress)
     /* Do not log here! */
-    _suppress_log = 1;
+    log_suppress = 1;
 
 #ifndef NDEBUG
   fprintf(
@@ -19,5 +17,5 @@ static __attribute__((constructor(101))) void _x86linuxextra_init(void) {
                   "(hurryman2212@gmail.com)\n");
 #endif
 
-  _usersched_init();
+  usersched_init();
 }

@@ -1,10 +1,8 @@
 #include "x86linux/helper.h"
 
-#include <signal.h>
-
 #include <execinfo.h>
 
-int _suppress_log = 0;
+int log_suppress = 0;
 
 int _log_backtrace(const char *filename, int line, const char *func) {
   void *buffer[LOG_MAX_BACKTRACE];

@@ -1,34 +1,43 @@
 #pragma once
 
-/* Common */
+/* [Common] BEGIN */
+
+/* [Common] END */
 
 #ifndef __KERNEL__
 
-/* For userspace only */
+/* [Userspace] BEGIN */
 
 #ifdef __cplusplus
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #else
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #endif
 
-#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/unistd.h>
 
 #include <x86intrin.h>
 
+/* [Userspace] END */
+
 #else
 
-/* For kernel only */
+/* [Kernel] BEGIN */
 
 #include <linux/pci.h>
 #include <linux/types.h>
 #include <linux/version.h>
+
+/* [Kernel] END */
 
 #endif
 
@@ -36,33 +45,44 @@
 extern "C" {
 #endif
 
-/* Common */
+/* [Common] BEGIN */
 
-#define restrict __restrict__
-#define __restrict __restrict__
+/* Static assertion */
 
-#define ADDR_CAST(val) (void *)(uintptr_t)val
-#define VAL_CAST(val) (uintptr_t) val
+#if defined(__cplusplus) && !defined(_Static_assert)
+#define _Static_assert static_assert
+#endif
+#define STATIC_ASSERT(expression)                                              \
+  _Static_assert(expression, "Assertion `" #expression "' failed.")
 
-#define READ_FEASIBLE_BYTES(pos_r, save_pos_w, pos_end, req_size)              \
-  ((pos_r <= save_pos_w)                                                       \
-       ? (((save_pos_w - pos_r) < req_size) ? (save_pos_w - pos_r) : req_size) \
-   : ((pos_end - pos_r) < req_size) ? pos_end - pos_r                          \
-                                    : req_size)
-#define WRITE_FEASIBLE_BYTES(save_pos_r, pos_w, pos_end, req_size)             \
-  ((pos_w < save_pos_r)                                                        \
-       ? (((save_pos_r - pos_w) < req_size) ? (save_pos_r - pos_w) : req_size) \
-   : ((pos_end - pos_w) < req_size) ? pos_end - pos_w                          \
-                                    : req_size)
+/* Casting */
+
+#define ADDR_CAST(addr) ((void *)(intptr_t)(addr))
+#define VAL_CAST(val, type) ((type)(intptr_t)(val))
+
+#define typeof_elem(struct, elem) typeof(((typeof(struct)){0}).elem)
+#define sizeof_elem(struct, elem) sizeof(((typeof(struct)){0}).elem)
+
+/* Alignment */
 
 #define align_size(size, alignment)                                            \
   ((((size) / (alignment)) + !!((size) % (alignment))) * (alignment))
 #define align_pow2_size(size, alignment_pow2)                                  \
   (((size) + ((alignment_pow2)-1)) & ~((alignment_pow2)-1))
 
+/* SPSC (free size) */
+
+size_t spsc_read_peek(size_t pos_r, size_t pos_w, size_t pos_end,
+                      size_t req_size);
+size_t spsc_write_peek(size_t pos_r, size_t pos_w, size_t pos_end,
+                       size_t req_size);
+
+/* x86 BMI */
+
 typedef uint64_t bitset64_t;
 #define BITSET64_ARR_LEN(nr_bits)                                              \
-  (nr_bits / (8 * sizeof(bitset64_t)) + !!(nr_bits % (8 + sizeof(bitset64_t))))
+  ((nr_bits) / (8 * sizeof(bitset64_t)) +                                      \
+   !!((nr_bits) % (8 + sizeof(bitset64_t))))
 
 int x86_test_bit(const bitset64_t *restrict bitset, uint32_t idx);
 
@@ -79,39 +99,49 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
                                      const bitset64_t *restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx);
 
+/* [Common] END */
+
 #ifndef __KERNEL__
 
-/* For userspace only */
+/* [Userspace] BEGIN */
+
+/* Base name of file */
 
 #define __filename__                                                           \
   (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
+/* Memory barrier */
+
 #define barrier() __asm__ __volatile__("" : : : "memory")
 
-/* unlikely() should be prioritized over likely()! */
+/* Static branch prediction */
+
+/* unlikely() should be prioritized over likely()! (?) */
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
-/* Use of likely() is discouraged! Try to use unlikely(). */
+/* Use of likely() is discouraged! Try to use unlikely(). (?) */
 #define likely(expr) __builtin_expect(!!(expr), 1)
+
+/* x86 UMWAIT */
 
 #define UMWAIT(address, control, counter, uaddr32, old_val32)                  \
   ({                                                                           \
-    _umonitor((void *)address);                                                \
-    (*uaddr32 == old_val32) ? _umwait(control, counter) : 0;                   \
+    _umonitor((void *)(address));                                              \
+    (*(uaddr32) == (old_val32)) ? _umwait(control, counter) : 0;               \
   })
 
-#define USERSCHED_TSC_1US_SLEEP_US 10000
-/**
- * TSC value representing 1us on this system setup by constructor
- *
- * (0 if not yet set)
- */
-extern uint32_t usersched_tsc_1us;
+/* Userspace scheduler */
 
+void usersched_init(void);
+
+#define USERSCHED_TSC_SETUP_TIMEOUT_US 10000
 /**
- * Boolean representing UMWAIT support on this system setup by constructor
+ * TSC frequency (TSC per second) on this system set by usersched_init()
  *
- * (-1 if not yet set)
+ * (default value is 1000 * 1000 * 1000, which means 1GHz)
  */
+extern int64_t usersched_tsc_freq;
+
+/* Boolean representing UMWAIT support on this system set by usersched_init() */
 extern int usersched_support_umwait;
 
 /**
@@ -134,9 +164,10 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
                           uint32_t old_val32);
 
 enum _USERSCHED_COND {
-  USERSCHED_COND_TERM = 0,
+  USERSCHED_COND_BREAK = 0,
   USERSCHED_COND_ONESHOT = 0,
-  USERSCHED_COND_RUN = 1
+  USERSCHED_COND_SCHEDULE = 1,
+  USERSCHED_COND_CONTINUE = 2,
 };
 
 /**
@@ -195,9 +226,11 @@ enum _USERSCHED_COND {
   *rel_timeout_tsc_ptr = _user_update_timeout_tsc(abs_timeout_tsc);            \
   (void)0
 
-extern int _suppress_log;
-#define ENABLE_LOG() (void)(_suppress_log = 0)
-#define DISABLE_LOG() (void)(_suppress_log = 1)
+/* Log */
+
+extern int log_suppress;
+#define ENABLE_LOG() (void)(log_suppress = 0)
+#define DISABLE_LOG() (void)(log_suppress = 1)
 
 #define _LOG_MSG(filename, line, func, postfix, format, ...)                   \
   "[tid %d] %s: %s:%d: %s: " format postfix, gettid(),                         \
@@ -222,15 +255,15 @@ extern int _suppress_log;
 #define _log(message, ...) dprintf(STDERR_FILENO, message)
 
 #define log(format, ...)                                                       \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_MSG(format, ##__VA_ARGS__)))
 #define log_info(format, ...)                                                  \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_INFO_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_INFO_MSG(format, ##__VA_ARGS__)))
 #define log_warn(format, ...)                                                  \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_WARN_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_WARN_MSG(format, ##__VA_ARGS__)))
 #define log_err(format, ...)                                                   \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_ERR_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_ERR_MSG(format, ##__VA_ARGS__)))
 #define _log_fatal(format, ...)                                                \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_FATAL_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_FATAL_MSG(format, ##__VA_ARGS__)))
 
 #define log_perror(format, ...)                                                \
   (!strcmp(format, "") ? log("%s", strerror(errno))                            \
@@ -252,8 +285,8 @@ extern int _suppress_log;
 int _log_backtrace(const char *filename, int line, const char *func);
 
 #define log_backtrace()                                                        \
-  (unlikely(_suppress_log) ? 0                                                 \
-                           : _log_backtrace(__filename__, __LINE__, __func__))
+  (unlikely(log_suppress) ? 0                                                  \
+                          : _log_backtrace(__filename__, __LINE__, __func__))
 
 #define _log_abort()                                                           \
   log_backtrace();                                                             \
@@ -285,7 +318,7 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 #ifndef NDEBUG
 #define log_debug(format, ...)                                                 \
-  (unlikely(_suppress_log) ? 0 : _log(LOG_DEBUG_MSG(format, ##__VA_ARGS__)))
+  (unlikely(log_suppress) ? 0 : _log(LOG_DEBUG_MSG(format, ##__VA_ARGS__)))
 #define log_debug_perror(format, ...)                                          \
   (!strcmp(format, "")                                                         \
        ? log_debug("%s", strerror(errno))                                      \
@@ -301,51 +334,41 @@ int _log_backtrace(const char *filename, int line, const char *func);
 #define log_debug_backtrace()
 #endif
 
+/* [Userspace] END */
+
 #else
 
-/* For kernel only */
+/* [Kernel] BEGIN */
+
+/* Base name of file */
 
 #define __filename__                                                           \
   (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
                                     : __FILE__)
 
-#define ERROR_CODE(ret)                                                        \
-  (int)(uintptr_t)({                                                           \
-    typeof(ret) _ret = ret;                                                    \
-    IS_ERR(_ret) ? _ret : 0;                                                   \
-  })
+/* Linux kernel compatibility */
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(6, 4, 0)
 #define class_create(owner, name) class_create(name)
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
-#define msi_desc_to_index(msi_desc) (msi_desc->msi_index)
+#define msi_desc_to_index(msi_desc) ((msi_desc)->msi_index)
 #else
-#define msi_desc_to_index(msi_desc) (msi_desc->msi_attrib.entry_nr)
+#define msi_desc_to_index(msi_desc) ((msi_desc)->msi_attrib.entry_nr)
 #endif
 
-enum module_destruct_level {
-  MODULE_STRUCT,
-  MODULE_DATA,
-  MODULE_CLS,
-  MODULE_DRIVER,
-  MODULE_FULL = MODULE_DRIVER,
-};
+/* Error handling */
 
-enum pci_destruct_level {
-  PCI_STRUCT,
-  PCI_DATA,
-  PCI_PDEV,
-  PCI_REGION,
-  PCI_CHRDEV,
-  PCI_CDEV,
-  PCI_DEV,
-  PCI_REG,
-  PCI_DEVM,
-  PCI_IRQ,
-  PCI_FULL = PCI_IRQ,
-};
+#define ERROR_CODE(ret)                                                        \
+  VAL_CAST(                                                                    \
+      {                                                                        \
+        typeof(ret) _ret = (ret);                                              \
+        IS_ERR(_ret) ? _ret : 0;                                               \
+      },                                                                       \
+      int)
+
+/* Log */
 
 #ifdef MODULE
 #define _KLOG_MSG(filename, line, func, fmt, ...)                              \
@@ -373,6 +396,8 @@ enum pci_destruct_level {
   printk(level _KLOG_DEV_MSG_TMPL(pdev, fmt, ##__VA_ARGS__))
 
 #endif
+
+/* [Kernel] END */
 
 #ifdef __cplusplus
 }
