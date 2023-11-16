@@ -1,4 +1,4 @@
-#include <sys/types.h>
+#include <stddef.h>
 
 size_t spsc_read_peek(size_t pos_r, size_t pos_w, size_t pos_end,
                       size_t req_size) {

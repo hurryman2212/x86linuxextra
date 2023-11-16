@@ -10,19 +10,21 @@
 
 #ifdef __cplusplus
 #include <cerrno>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #else
 #include <errno.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #endif
 
-#include <sys/syscall.h>
+#include <sys/syslog.h>
 #include <sys/unistd.h>
 
 #include <x86intrin.h>
@@ -34,7 +36,6 @@
 /* [Kernel] BEGIN */
 
 #include <linux/pci.h>
-#include <linux/types.h>
 #include <linux/version.h>
 
 /* [Kernel] END */
@@ -57,8 +58,8 @@ extern "C" {
 
 /* Casting */
 
-#define ADDR_CAST(addr) ((void *)(intptr_t)(addr))
-#define VAL_CAST(val, type) ((type)(intptr_t)(val))
+#define address_cast(value) ((void *)(intptr_t)(value))
+#define value_cast(address, type) ((type)(intptr_t)(address))
 
 #define typeof_elem(struct, elem) typeof(((typeof(struct)){0}).elem)
 #define sizeof_elem(struct, elem) sizeof(((typeof(struct)){0}).elem)
@@ -133,6 +134,12 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
 
 void usersched_init(void);
 
+/* Boolean representing UMWAIT support on this system set by usersched_init()
+ *
+ * (default value is 0 (unavailable))
+ */
+extern int usersched_support_umwait;
+
 #define USERSCHED_TSC_SETUP_TIMEOUT_US 10000
 /**
  * TSC frequency (TSC per second) on this system set by usersched_init()
@@ -140,9 +147,6 @@ void usersched_init(void);
  * (default value is 1000 * 1000 * 1000, which means 1GHz)
  */
 extern int64_t usersched_tsc_freq;
-
-/* Boolean representing UMWAIT support on this system set by usersched_init() */
-extern int usersched_support_umwait;
 
 /**
  * Return absolute TSC value referring timeout
@@ -228,111 +232,99 @@ enum _USERSCHED_COND {
 
 /* Log */
 
-extern int log_suppress;
-#define ENABLE_LOG() (void)(log_suppress = 0)
-#define DISABLE_LOG() (void)(log_suppress = 1)
+/* Setup logging system and enable it. */
+void log_init(const char *ident, int option, int facility, int broadcast_stderr,
+              int broadcast_syslog);
+/* Disable logging system and and destruct it. */
+void log_deinit(void);
 
-#define _LOG_MSG(filename, line, func, postfix, format, ...)                   \
-  "[tid %d] %s: %s:%d: %s: " format postfix, gettid(),                         \
-      program_invocation_short_name, filename, line, func, ##__VA_ARGS__
-#define _LOG_MSG_TMPL(postfix, format, ...)                                    \
-  _LOG_MSG(__filename__, __LINE__, __func__, postfix, format, ##__VA_ARGS__)
+extern int log_enabled; // Default value is 0 (disabled).
+#define ENABLE_LOG() ((void)(log_enabled = 1))
+#define DISABLE_LOG() ((void)(log_enabled = 0))
 
-#define LOG_MSG(format, ...) _LOG_MSG_TMPL("\n", format, ##__VA_ARGS__)
-#define LOG_DEBUG_MSG(format, ...)                                             \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[2;37mDEBUG: " format, ##__VA_ARGS__)
-#define LOG_INFO_MSG(format, ...)                                              \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[34mINFO: " format, ##__VA_ARGS__)
-#define LOG_WARN_MSG(format, ...)                                              \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[33mWARNING: " format, ##__VA_ARGS__)
-#define LOG_ERR_MSG(format, ...)                                               \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[31mERROR: " format, ##__VA_ARGS__)
-#define LOG_FATAL_MSG(format, ...)                                             \
-  _LOG_MSG_TMPL("\e[0m\n", "\e[1;31mFATAL: " format, ##__VA_ARGS__)
+#define LOG_BUFSIZ 4096
+void _log(int level, const char *filename, int line, const char *func,
+          const char *fmt, ...);
+void _vlog(int level, const char *filename, int line, const char *func,
+           const char *fmt, va_list ap);
+#define log(level, fmt, ...)                                                   \
+  _log(level, __filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define vlog(level, fmt, ap)                                                   \
+  _vlog(level, __filename__, __LINE__, __func__, fmt, ap)
+#define log_emerg(fmt, ...) log(LOG_EMERG, fmt, ##__VA_ARGS__)
+#define log_alert(fmt, ...) log(LOG_ALERT, fmt, ##__VA_ARGS__)
+#define log_crit(fmt, ...) log(LOG_CRIT, fmt, ##__VA_ARGS__)
+#define log_err(fmt, ...) log(LOG_ERR, fmt, ##__VA_ARGS__)
+#define log_warning(fmt, ...) log(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_notice(fmt, ...) log(LOG_NOTICE, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...) log(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) log(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define vlog_emerg(fmt, ...) vlog(LOG_EMERG, fmt, ##__VA_ARGS__)
+#define vlog_alert(fmt, ...) vlog(LOG_ALERT, fmt, ##__VA_ARGS__)
+#define vlog_crit(fmt, ...) vlog(LOG_CRIT, fmt, ##__VA_ARGS__)
+#define vlog_err(fmt, ...) vlog(LOG_ERR, fmt, ##__VA_ARGS__)
+#define vlog_warning(fmt, ...) vlog(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define vlog_notice(fmt, ...) vlog(LOG_NOTICE, fmt, ##__VA_ARGS__)
+#define vlog_info(fmt, ...) vlog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define vlog_debug(fmt, ...) vlog(LOG_DEBUG, fmt, ##__VA_ARGS__)
 
-#define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
+void _log_perror(const char *filename, int line, const char *func,
+                 const char *s);
+#define log_perror(s) _log_perror(__filename__, __LINE__, __func__, s)
 
-#define _log(message, ...) dprintf(STDERR_FILENO, message)
-
-#define log(format, ...)                                                       \
-  (unlikely(log_suppress) ? 0 : _log(LOG_MSG(format, ##__VA_ARGS__)))
-#define log_info(format, ...)                                                  \
-  (unlikely(log_suppress) ? 0 : _log(LOG_INFO_MSG(format, ##__VA_ARGS__)))
-#define log_warn(format, ...)                                                  \
-  (unlikely(log_suppress) ? 0 : _log(LOG_WARN_MSG(format, ##__VA_ARGS__)))
-#define log_err(format, ...)                                                   \
-  (unlikely(log_suppress) ? 0 : _log(LOG_ERR_MSG(format, ##__VA_ARGS__)))
-#define _log_fatal(format, ...)                                                \
-  (unlikely(log_suppress) ? 0 : _log(LOG_FATAL_MSG(format, ##__VA_ARGS__)))
-
-#define log_perror(format, ...)                                                \
-  (!strcmp(format, "") ? log("%s", strerror(errno))                            \
-                       : log(format ": %s", ##__VA_ARGS__, strerror(errno)))
-#define log_info_perror(format, ...)                                           \
-  (!strcmp(format, "")                                                         \
-       ? log_info("%s", strerror(errno))                                       \
-       : log_info(format ": %s", ##__VA_ARGS__, strerror(errno)))
-#define log_warn_perror(format, ...)                                           \
-  (!strcmp(format, "")                                                         \
-       ? log_warn("%s", strerror(errno))                                       \
-       : log_warn(format ": %s", ##__VA_ARGS__, strerror(errno)))
-#define log_err_perror(format, ...)                                            \
-  (!strcmp(format, "")                                                         \
-       ? log_err("%s", strerror(errno))                                        \
-       : log_err(format ": %s", ##__VA_ARGS__, strerror(errno)))
-
-#define LOG_MAX_BACKTRACE 1024
-int _log_backtrace(const char *filename, int line, const char *func);
-
-#define log_backtrace()                                                        \
-  (unlikely(log_suppress) ? 0                                                  \
-                          : _log_backtrace(__filename__, __LINE__, __func__))
+#define LOG_BACKTRACE_MAX 1024
+void _log_backtrace(int level, const char *filename, int line,
+                    const char *func);
+#define log_backtrace(level)                                                   \
+  _log_backtrace(level, __filename__, __LINE__, __func__)
+#define log_backtrace_emerg() log_backtrace(LOG_EMERG)
+#define log_backtrace_alert() log_backtrace(LOG_ALERT)
+#define log_backtrace_crit() log_backtrace(LOG_CRIT)
+#define log_backtrace_err() log_backtrace(LOG_ERR)
+#define log_backtrace_warning() log_backtrace(LOG_WARNING)
+#define log_backtrace_notice() log_backtrace(LOG_NOTICE)
+#define log_backtrace_info() log_backtrace(LOG_INFO)
+#define log_backtrace_debug() log_backtrace(LOG_DEBUG)
 
 #define _log_abort()                                                           \
-  log_backtrace();                                                             \
-  abort()
+  {                                                                            \
+    log_backtrace_emerg();                                                     \
+    abort();                                                                   \
+  }                                                                            \
+  (void)0
+#define _ABORT_MSG "abort"
+#define log_abort(fmt, ...)                                                    \
+  {                                                                            \
+    !strcmp(fmt, "") ? log_emerg(_ABORT_MSG) : log_emerg(fmt, ##__VA_ARGS__);  \
+    _log_abort();                                                              \
+  }                                                                            \
+  (void)0
 
-#define log_abort(format, ...)                                                 \
-  ({                                                                           \
-    !strcmp(format, "") ? _log_fatal("abort")                                  \
-                        : _log_fatal(format, ##__VA_ARGS__);                   \
-    _log_abort();                                                              \
-  })
-#define log_perror_abort(format, ...)                                          \
-  ({                                                                           \
-    !strcmp(format, "")                                                        \
-        ? _log_fatal("%s", strerror(errno))                                    \
-        : _log_fatal(format ": %s", ##__VA_ARGS__, strerror(errno));           \
-    _log_abort();                                                              \
-  })
-
-#define _log_assert(expression)                                                \
-  ({                                                                           \
-    _log_fatal(_ASSERT_MSG(expression));                                       \
-    _log_abort();                                                              \
-  })
+#define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
 #define log_assert(expression)                                                 \
-  (!(expression) ? _log_assert(expression) : (void)0)
-#define log_perror_assert(expression)                                          \
-  (!(expression) ? log_perror_abort(_ASSERT_MSG(expression)) : (void)0)
+  {                                                                            \
+    if (!(expression)) {                                                       \
+      log_emerg(_ASSERT_MSG(expression));                                      \
+      _log_abort();                                                            \
+    }                                                                          \
+  }                                                                            \
+  (void)0
 
-#ifndef NDEBUG
-#define log_debug(format, ...)                                                 \
-  (unlikely(log_suppress) ? 0 : _log(LOG_DEBUG_MSG(format, ##__VA_ARGS__)))
-#define log_debug_perror(format, ...)                                          \
-  (!strcmp(format, "")                                                         \
-       ? log_debug("%s", strerror(errno))                                      \
-       : log_debug(format ": %s", ##__VA_ARGS__, strerror(errno)))
-#define log_debug_assert(expression) log_assert(expression)
-#define log_debug_perror_assert(expression) log_perror_assert(expression)
-#define log_debug_backtrace() log_backtrace()
-#else
-#define log_debug(format, ...)
-#define log_debug_perror(format, ...)
-#define log_debug_assert(expression) (void)(expression)
-#define log_debug_perror_assert(expression) (void)(expression)
-#define log_debug_backtrace()
-#endif
+#define log_perror_abort(fmt, ...)                                             \
+  {                                                                            \
+    if (strcmp(fmt, ""))                                                       \
+      log_emerg("%s", strerror(errno));                                        \
+    else                                                                       \
+      log_emerg("%s: %s", ##__VA_ARGS__, strerror(errno));                     \
+    _log_abort();                                                              \
+  }                                                                            \
+  (void)0
+#define log_perror_assert(expression)                                          \
+  {                                                                            \
+    if (!(expression))                                                         \
+      log_perror_abort(_ASSERT_MSG(expression));                               \
+  }                                                                            \
+  (void)0
 
 /* [Userspace] END */
 
@@ -346,7 +338,7 @@ int _log_backtrace(const char *filename, int line, const char *func);
   (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
                                     : __FILE__)
 
-/* Linux kernel compatibility */
+/* Compatibility */
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(6, 4, 0)
 #define class_create(owner, name) class_create(name)
@@ -360,13 +352,12 @@ int _log_backtrace(const char *filename, int line, const char *func);
 
 /* Error handling */
 
-#define ERROR_CODE(ret)                                                        \
-  VAL_CAST(                                                                    \
-      {                                                                        \
-        typeof(ret) _ret = (ret);                                              \
-        IS_ERR(_ret) ? _ret : 0;                                               \
-      },                                                                       \
-      int)
+#define ERRNO(ret)                                                             \
+  value_cast(({                                                                \
+               typeof(ret) _ret = (ret);                                       \
+               IS_ERR(address_cast(_ret)) ? _ret : 0;                          \
+             }),                                                               \
+             int)
 
 /* Log */
 

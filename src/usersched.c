@@ -127,10 +127,8 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
   return 1;
 }
 
-int64_t usersched_tsc_freq = 1000 * 1000 * 1000; // 1GHz
-
 int usersched_support_umwait = 0;
-
+int64_t usersched_tsc_freq = 1000 * 1000 * 1000; // 1GHz
 /* Setup global variables for 1us TSC value and UMWAIT support. */
 void usersched_init(void) {
   struct perf_event_attr pe = {
@@ -151,14 +149,14 @@ void usersched_init(void) {
   uint32_t eax, ebx, ecx, edx;
 
 #ifdef _NO_UMWAIT
-  log_warn("This build does NOT have UMWAIT support!");
+  log_warning("This build does NOT have UMWAIT support!");
 #endif
 
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
   const char *env_no_umwait = getenv("USERSCHED_NO_UMWAIT");
   if (env_no_umwait) {
-    log_warn("env: USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
-             env_no_umwait);
+    log_warning("env: USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
+                env_no_umwait);
     usersched_support_umwait = 0;
   } else {
 #endif
