@@ -3,10 +3,9 @@
 #include <execinfo.h>
 
 int log_enabled = 0;
-static int log_syslog_enabled = 0;
 
+static int log_syslog_enabled = 0;
 static const char *self_ident = NULL;
-static _Thread_local pid_t self_tid = 0;
 
 static const char *LEVEL_TO_COLOR[] = {
     "\e[1;41;37m", "\e[1;101m", "\e[101m", "\e[1;31m",
@@ -27,7 +26,7 @@ void _log_perror(const char *filename, int line, const char *func,
 }
 void _log(int level, const char *filename, int line, const char *func,
           const char *fmt, ...) {
-  if (log_enabled) {
+  if (unlikely(log_enabled)) {
     va_list ap;
     va_start(ap, fmt);
     _vlog(level, filename, line, func, fmt, ap);
@@ -37,7 +36,7 @@ void _log(int level, const char *filename, int line, const char *func,
 static _Thread_local char log_buf[LOG_BUFSIZ];
 void _vlog(int level, const char *filename, int line, const char *func,
            const char *fmt, va_list ap) {
-  if (log_enabled) {
+  if (unlikely(log_enabled)) {
     if (log_syslog_enabled) {
       snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level],
                LEVEL_TO_STR[level], filename, line, func, fmt);
@@ -46,9 +45,8 @@ void _vlog(int level, const char *filename, int line, const char *func,
     } else {
       snprintf(log_buf, sizeof(log_buf), LOG_STDERR_FMT,
                (self_ident ? self_ident : program_invocation_short_name),
-               (self_tid ? self_tid : (self_tid = gettid())),
-               LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], filename, line, func,
-               fmt);
+               usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+               filename, line, func, fmt);
 
       vdprintf(STDERR_FILENO, log_buf, ap);
     }
@@ -58,7 +56,7 @@ void _vlog(int level, const char *filename, int line, const char *func,
 static _Thread_local void *backtrace_buf[LOG_BACKTRACE_MAX];
 void _log_backtrace(int level, const char *filename, int line,
                     const char *func) {
-  if (log_enabled) {
+  if (unlikely(log_enabled)) {
     int size = backtrace(backtrace_buf, LOG_BACKTRACE_MAX);
 
     char **strings;
@@ -72,9 +70,8 @@ void _log_backtrace(int level, const char *filename, int line,
     } else {
       dprintf(STDERR_FILENO, LOG_STDERR_FMT,
               (self_ident ? self_ident : program_invocation_short_name),
-              (self_tid ? self_tid : (self_tid = gettid())),
-              LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], filename, line, func,
-              LOG_BACKTRACE_MSG);
+              usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+              filename, line, func, LOG_BACKTRACE_MSG);
       for (int i = 0; i < size; i++)
         dprintf(STDERR_FILENO, " %s", strings[i]);
     }

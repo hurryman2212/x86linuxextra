@@ -50,8 +50,8 @@ extern "C" {
 
 /* Casting */
 
-#define address_cast(value) ((void *)(intptr_t)(value))
-#define value_cast(address, type) ((type)(intptr_t)(address))
+#define address_cast(value) ((void *)(uintptr_t)(value))
+#define value_cast(address, type) ((type)(uintptr_t)(address))
 
 #define typeof_elem(struct, elem) typeof(((typeof(struct)){0}).elem)
 #define sizeof_elem(struct, elem) sizeof(((typeof(struct)){0}).elem)
@@ -69,6 +69,9 @@ size_t spsc_read_peek(size_t pos_r, size_t pos_w, size_t pos_end,
                       size_t req_size);
 size_t spsc_write_peek(size_t pos_r, size_t pos_w, size_t pos_end,
                        size_t req_size);
+
+void spsc_rewind_read(size_t *__restrict pos_r, size_t pos_w, size_t pos_end);
+void spsc_rewind_write(size_t pos_r, size_t *__restrict pos_w, size_t pos_end);
 
 /* x86 BMI */
 
@@ -124,9 +127,12 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
 
 /* Userspace scheduler */
 
+pid_t usersched_gettid(void);
+
 void usersched_init(int prohibit_umwait);
 
-/* Boolean representing UMWAIT support on this system set by usersched_init()
+/**
+ * Boolean of UMWAIT support on this system set by usersched_init() call
  *
  * (default value is 0 (unavailable))
  */
@@ -134,11 +140,17 @@ extern int usersched_support_umwait;
 
 #define USERSCHED_TSC_SETUP_TIMEOUT_US 10000
 /**
- * TSC frequency (TSC per second) on this system set by usersched_init()
+ * TSC frequency (TSC per second) on this system set by usersched_init() call
  *
  * (default value is 1000 * 1000 * 1000, which means 1GHz)
  */
-extern int64_t usersched_tsc_freq;
+extern uint64_t usersched_tsc_freq;
+/**
+ * TSC per 1us on this set by usersched_init() call
+ *
+ * ((TSC per us) = (TSC per sec.) / 10^6)
+ * */
+extern uint32_t usersched_tsc_1us;
 
 /**
  * Return absolute TSC value referring timeout

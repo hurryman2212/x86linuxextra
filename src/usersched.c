@@ -45,7 +45,7 @@ uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc) {
                : (abs_timeout_tsc + (UINT64_MAX - tsc));
   return (abs_timeout_tsc <= tsc) ? 0 : (abs_timeout_tsc - tsc);
 }
-
+int usersched_support_umwait = 0;
 uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
                           const volatile uint32_t *__restrict uaddr32,
                           uint32_t old_val32) {
@@ -127,8 +127,8 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
   return 1;
 }
 
-int usersched_support_umwait = 0;
-int64_t usersched_tsc_freq = 1000 * 1000 * 1000; // 1GHz
+uint64_t usersched_tsc_freq = 1000 * 1000 * 1000;
+uint32_t usersched_tsc_1us = 1000;
 /* Setup global variables for 1us TSC value and UMWAIT support. */
 void usersched_init(int prohibit_umwait) {
   struct perf_event_attr pe = {
@@ -192,9 +192,13 @@ void usersched_init(int prohibit_umwait) {
     /* Check user time support. */
     if (!pc->cap_user_time)
       fast_path = 0; // Use the alternative slow path.
-    else
+    else {
       usersched_tsc_freq =
-          ((__uint128_t)(1000 * 1000 * 1000) << pc->time_shift) / pc->time_mult;
+          ((__uint128_t)(1000 * 1000 * 1000) << pc->time_shift) /
+          pc->time_mult; // ?
+      /* (TSC per us) = (TSC per sec.) / 10^6 */
+      usersched_tsc_1us = usersched_tsc_freq / (1000 * 1000);
+    }
 
     /* Clean up. */
     log_perror_assert(!munmap(pc, page_size));
@@ -238,5 +242,12 @@ void usersched_init(int prohibit_umwait) {
     usersched_tsc_freq = ((__uint128_t)tsc_end - tsc_begin) // elapsed tsc
                          * (1000 * 1000 * 1000)             // 10^9
                          / (ns_end - ns_begin);             // elapsed ns
+    /* (TSC per us) = (TSC per sec.) / 10^6 */
+    usersched_tsc_1us = usersched_tsc_freq / (1000 * 1000);
   }
+}
+
+static _Thread_local pid_t usersched_tid = 0;
+pid_t usersched_gettid(void) {
+  return unlikely(!usersched_tid) ? (usersched_tid = gettid()) : usersched_tid;
 }

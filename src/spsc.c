@@ -1,4 +1,4 @@
-#include <stddef.h>
+#include <x86linux/helper.h>
 
 size_t spsc_read_peek(size_t pos_r, size_t pos_w, size_t pos_end,
                       size_t req_size) {
@@ -13,4 +13,13 @@ size_t spsc_write_peek(size_t pos_r, size_t pos_w, size_t pos_end,
              ? (((pos_r - pos_w) < req_size) ? (pos_r - pos_w) : req_size)
          : ((pos_end - pos_w) < req_size) ? (pos_end - pos_w)
                                           : req_size;
+}
+
+void spsc_rewind_read(size_t *__restrict pos_r, size_t pos_w, size_t pos_end) {
+  if (unlikely(pos_end == *pos_r) && pos_w != *pos_r)
+    *pos_r = 0;
+}
+void spsc_rewind_write(size_t pos_r, size_t *__restrict pos_w, size_t pos_end) {
+  if (unlikely(pos_end == *pos_w) && pos_r)
+    *pos_w = 0;
 }
