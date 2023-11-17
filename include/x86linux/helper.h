@@ -77,19 +77,19 @@ typedef uint64_t bitset64_t;
   ((nr_bits) / (8 * sizeof(bitset64_t)) +                                      \
    !!((nr_bits) % (8 + sizeof(bitset64_t))))
 
-int x86_test_bit(const bitset64_t *restrict bitset, uint32_t idx);
+int x86_test_bit(const bitset64_t *__restrict bitset, uint32_t idx);
 
-int x86_set_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx);
-int x86_unset_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx);
-int x86_set_bit_atomic(bitset64_t *restrict bitset, uint32_t idx);
-int x86_unset_bit_atomic(bitset64_t *restrict bitset, uint32_t idx);
+int x86_set_bit_nonatomic(bitset64_t *__restrict bitset, uint32_t idx);
+int x86_unset_bit_nonatomic(bitset64_t *__restrict bitset, uint32_t idx);
+int x86_set_bit_atomic(bitset64_t *__restrict bitset, uint32_t idx);
+int x86_unset_bit_atomic(bitset64_t *__restrict bitset, uint32_t idx);
 
-int64_t x86_search_lowest_bit(const bitset64_t *restrict bitset,
+int64_t x86_search_lowest_bit(const bitset64_t *__restrict bitset,
                               uint32_t start_idx, uint32_t last_idx);
-int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *restrict bitset,
+int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *__restrict bitset,
                                          uint32_t start_idx, uint32_t last_idx);
-int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
-                                     const bitset64_t *restrict bitset2,
+int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
+                                     const bitset64_t *__restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx);
 
 /* [Common] END */
@@ -156,7 +156,7 @@ unsigned long long _user_schedule_start(uint32_t timeout_tsc);
 uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc);
 
 uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
-                          const volatile uint32_t *restrict uaddr32,
+                          const volatile uint32_t *__restrict uaddr32,
                           uint32_t old_val32);
 
 enum _USERSCHED_COND {
@@ -174,10 +174,10 @@ enum _USERSCHED_COND {
  *
  * @param rel_timeout_tsc (uint32_t) Relative timeout TSC (UINT32_MAX if
  * indefinite)
- * @param abs_timeout_tsc_ptr (unsigned long long *restrict) Pointer to store
+ * @param abs_timeout_tsc_ptr (unsigned long long *__restrict) Pointer to store
  * absolute timeout TSC (UINT64_MAX will be stored if indefinite or 0 if
  * immediate)
- * @param cond_ptr (uint32_t *restrict) Pointer to store initial conditional
+ * @param cond_ptr (uint32_t *__restrict) Pointer to store initial conditional
  * value for scheduling
  * @param cond_init (uint32_t) Initial value to be saved to *cond_ptr
  */
@@ -194,15 +194,15 @@ enum _USERSCHED_COND {
  * Do NOT use `break` or `continue` above this macro in same scope (use
  * cond_ptr instead).
  *
- * @param rel_timeout_tsc_ptr (uint32_t *restrict) Pointer to store deducted
+ * @param rel_timeout_tsc_ptr (uint32_t *__restrict) Pointer to store deducted
  * relative timeout TSC (UINT32_MAX will be stored if indefinite)
  * @param abs_timeout_tsc (unsigned long long) Absolute timeout TSC (UINT64_MAX
  * if indefinite or 0 if immediate)
- * @param snoop_uaddr32 (const volatile uint32_t *restrict) Address to snoop (if
- * UMWAIT support is present) and compare (will NOT be compared if NULL)
+ * @param snoop_uaddr32 (const volatile uint32_t *__restrict) Address to snoop
+ * (if UMWAIT support is present) and compare (will NOT be compared if NULL)
  * @param old_val32 (uint32_t) Original value stored at non-NULL snoop_addr32
  * (timeout will NOT happen if *snoop_uaddr32 == old_val32)
- * @param cond_ptr (uint32_t *restrict) Pointer to conditional value for
+ * @param cond_ptr (uint32_t *__restrict) Pointer to conditional value for
  * scheduling (0 will be saved if timeout and if the value > 1, it will be
  * decremented with timeout checking (+ snooping) bypassed)
  */
@@ -211,12 +211,12 @@ enum _USERSCHED_COND {
   {}                                                                           \
   }                                                                            \
   while ((*cond_ptr == 1)                                                      \
-             ? (*cond_ptr =                                                    \
-                    (!(uintptr_t)snoop_uaddr32 ||                              \
-                     (*(const uint32_t *restrict)snoop_uaddr32 == old_val32))  \
-                        ? _user_reschedule(abs_timeout_tsc, snoop_uaddr32,     \
-                                           old_val32)                          \
-                        : 1)                                                   \
+             ? (*cond_ptr = (!(uintptr_t)snoop_uaddr32 ||                      \
+                             (*(const uint32_t *__restrict)snoop_uaddr32 ==    \
+                              old_val32))                                      \
+                                ? _user_reschedule(abs_timeout_tsc,            \
+                                                   snoop_uaddr32, old_val32)   \
+                                : 1)                                           \
              : (*cond_ptr ? --*cond_ptr : 0))                                  \
     ;                                                                          \
   *rel_timeout_tsc_ptr = _user_update_timeout_tsc(abs_timeout_tsc);            \

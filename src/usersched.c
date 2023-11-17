@@ -47,7 +47,7 @@ uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc) {
 }
 
 uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
-                          const volatile uint32_t *restrict uaddr32,
+                          const volatile uint32_t *__restrict uaddr32,
                           uint32_t old_val32) {
   /* Do not evaluate (*uaddr32 != old_val32 ) first! */
 
@@ -185,7 +185,7 @@ void usersched_init(int prohibit_umwait) {
 
     ssize_t page_size = sysconf(_SC_PAGESIZE);
     log_perror_assert((page_size = sysconf(_SC_PAGESIZE)) != -1);
-    struct perf_event_mmap_page *restrict pc;
+    struct perf_event_mmap_page *pc;
     log_perror_assert((pc = mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd,
                                  0)) != MAP_FAILED);
 

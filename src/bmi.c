@@ -1,6 +1,6 @@
 #include "x86linux/helper.h"
 
-int x86_test_bit(const bitset64_t *restrict bitset, uint32_t idx) {
+int x86_test_bit(const bitset64_t *__restrict bitset, uint32_t idx) {
   uint32_t r32_bitset = *(((uint32_t *)bitset) + (idx >> 5));
 
   int cf;
@@ -9,7 +9,7 @@ int x86_test_bit(const bitset64_t *restrict bitset, uint32_t idx) {
   return cf;
 }
 
-int x86_set_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx) {
+int x86_set_bit_nonatomic(bitset64_t *__restrict bitset, uint32_t idx) {
   uint32_t *bitset32 = (void *)bitset;
   bitset32 += (idx >> 5);
 
@@ -18,7 +18,7 @@ int x86_set_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx) {
 
   return cf;
 }
-int x86_unset_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx) {
+int x86_unset_bit_nonatomic(bitset64_t *__restrict bitset, uint32_t idx) {
   uint32_t *bitset32 = (void *)bitset;
   bitset32 += (idx >> 5);
 
@@ -27,7 +27,7 @@ int x86_unset_bit_nonatomic(bitset64_t *restrict bitset, uint32_t idx) {
 
   return cf;
 }
-int x86_set_bit_atomic(bitset64_t *restrict bitset, uint32_t idx) {
+int x86_set_bit_atomic(bitset64_t *__restrict bitset, uint32_t idx) {
   int cf;
   asm volatile("lock bts %2, %1"
                : "=@ccc"(cf), "+m"(*bitset)
@@ -36,7 +36,7 @@ int x86_set_bit_atomic(bitset64_t *restrict bitset, uint32_t idx) {
 
   return cf;
 }
-int x86_unset_bit_atomic(bitset64_t *restrict bitset, uint32_t idx) {
+int x86_unset_bit_atomic(bitset64_t *__restrict bitset, uint32_t idx) {
   int cf;
   asm volatile("lock btr %2, %1"
                : "=@ccc"(cf), "+m"(*bitset)
@@ -46,7 +46,7 @@ int x86_unset_bit_atomic(bitset64_t *restrict bitset, uint32_t idx) {
   return cf;
 }
 
-int64_t x86_search_lowest_bit(const bitset64_t *restrict bitset,
+int64_t x86_search_lowest_bit(const bitset64_t *__restrict bitset,
                               uint32_t start_idx, uint32_t last_idx) {
   bitset64_t tmp = start_idx & 0x3F;
   if (tmp) {
@@ -68,7 +68,7 @@ int64_t x86_search_lowest_bit(const bitset64_t *restrict bitset,
   }
   return -1;
 }
-int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *restrict bitset,
+int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *__restrict bitset,
                                          uint32_t start_idx,
                                          uint32_t last_idx) {
   int64_t res = x86_search_lowest_bit(bitset, start_idx, last_idx);
@@ -76,8 +76,8 @@ int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *restrict bitset,
     *(bitset + (res >> 6)) = __blsr_u64(*(bitset + (res >> 6)));
   return res;
 }
-int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
-                                     const bitset64_t *restrict bitset2,
+int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
+                                     const bitset64_t *__restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx) {
   bitset64_t tmp = start_idx & 0x3F;
   if (tmp) {
