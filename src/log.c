@@ -103,7 +103,7 @@ void log_init(const char *ident, int option, int facility, int broadcast_stderr,
 }
 void log_deinit(void) {
   /* Disable logging first. */
-  DISABLE_LOG();
+  log_disable();
 
   if (log_syslog_enabled) {
     closelog();

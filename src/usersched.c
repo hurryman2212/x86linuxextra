@@ -130,7 +130,7 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
 int usersched_support_umwait = 0;
 int64_t usersched_tsc_freq = 1000 * 1000 * 1000; // 1GHz
 /* Setup global variables for 1us TSC value and UMWAIT support. */
-void usersched_init(void) {
+void usersched_init(int prohibit_umwait) {
   struct perf_event_attr pe = {
       .type = PERF_TYPE_HARDWARE,
       .size = sizeof(struct perf_event_attr),
@@ -148,19 +148,11 @@ void usersched_init(void) {
   };
   uint32_t eax, ebx, ecx, edx;
 
-#ifdef _NO_UMWAIT
-  log_warning("This build does NOT have UMWAIT support!");
-#endif
-
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
-  const char *env_no_umwait = getenv("USERSCHED_NO_UMWAIT");
-  if (env_no_umwait) {
-    log_warning("env: USERSCHED_NO_UMWAIT=%s -> UMWAIT will not be used!",
-                env_no_umwait);
-    usersched_support_umwait = 0;
-  } else {
+  if (!prohibit_umwait) {
 #endif
 
+#ifndef _NO_UMWAIT
     /* Check UMWAIT support. */
     eax = 7;
     ecx = 0;
@@ -168,16 +160,13 @@ void usersched_init(void) {
                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
                  : "a"(eax), "c"(ecx));
     usersched_support_umwait = !!(ecx & (1 << 5));
-
-    if (usersched_support_umwait)
-      log_info("This system DOES support UMONITOR/UMWAIT instruction.");
-    else
-      log_info("This system does NOT support UMONITOR/UMWAIT instruction.");
+#else
+  usersched_support_umwait = 0;
+#endif
 
 #ifdef _FORCE_UMWAIT
     if (!usersched_support_umwait)
-      log_abort(
-          "No UMWAIT support present with UMWAIT-dependent build! Aborting...");
+      log_abort("No UMWAIT support present inside UMWAIT-dependent build!");
 #endif
 
 #if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
@@ -193,15 +182,12 @@ void usersched_init(void) {
     fast_path = 0;
   else {
     /* Faster path */
-    log_info("perf_event_open: %s -> Using fast path...", strerror(errno));
 
     ssize_t page_size = sysconf(_SC_PAGESIZE);
-    if (page_size == -1)
-      log_perror_abort("sysconf");
-    struct perf_event_mmap_page *restrict pc =
-        mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (pc == MAP_FAILED)
-      log_perror_abort("mmap");
+    log_perror_assert((page_size = sysconf(_SC_PAGESIZE)) != -1);
+    struct perf_event_mmap_page *restrict pc;
+    log_perror_assert((pc = mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd,
+                                 0)) != MAP_FAILED);
 
     /* Check user time support. */
     if (!pc->cap_user_time)
@@ -211,15 +197,12 @@ void usersched_init(void) {
           ((__uint128_t)(1000 * 1000 * 1000) << pc->time_shift) / pc->time_mult;
 
     /* Clean up. */
-    if (munmap(pc, page_size))
-      log_perror_abort("munmap");
-    if (close(fd))
-      log_perror_abort("close");
+    log_perror_assert(!munmap(pc, page_size));
+    log_perror_assert(!close(fd));
   }
 
   if (!fast_path) {
     /* Slower path */
-    log_info("perf_event_open: %s -> Using slow path...", strerror(errno));
 
     /**
      * Check Invariant TSC.
@@ -231,22 +214,21 @@ void usersched_init(void) {
                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
                  : "a"(eax));
     if (!(edx & (1 << 8)))
-      log_abort("No invariant TSC support!");
+      log_abort(
+          "Both perf_event_open() and invariant TSC support is unavailable!");
 
     unsigned int tsc_aux_start, tsc_aux_end;
     unsigned long long tsc_begin, tsc_end, ns_begin, ns_end;
     do {
       struct timespec ts;
 
-      if (!clock_gettime(CLOCK_MONOTONIC_RAW, &ts))
-        log_perror_abort("clock_gettime");
+      log_perror_assert(!clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
       ns_begin = (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec;
       tsc_begin = __rdtscp(&tsc_aux_start);
 
       usleep(USERSCHED_TSC_SETUP_TIMEOUT_US);
 
-      if (!clock_gettime(CLOCK_MONOTONIC_RAW, &ts))
-        log_perror_abort("clock_gettime");
+      log_perror_assert(!clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
       ns_end = (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec;
       tsc_end = __rdtscp(&tsc_aux_end);
 
@@ -257,6 +239,4 @@ void usersched_init(void) {
                          * (1000 * 1000 * 1000)             // 10^9
                          / (ns_end - ns_begin);             // elapsed ns
   }
-
-  log_info("usersched_tsc_freq <- %lu", usersched_tsc_freq);
 }

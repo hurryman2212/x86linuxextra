@@ -48,14 +48,6 @@ extern "C" {
 
 /* [Common] BEGIN */
 
-/* Static assertion */
-
-#if defined(__cplusplus) && !defined(_Static_assert)
-#define _Static_assert static_assert
-#endif
-#define STATIC_ASSERT(expression)                                              \
-  _Static_assert(expression, "Assertion `" #expression "' failed.")
-
 /* Casting */
 
 #define address_cast(value) ((void *)(intptr_t)(value))
@@ -81,7 +73,7 @@ size_t spsc_write_peek(size_t pos_r, size_t pos_w, size_t pos_end,
 /* x86 BMI */
 
 typedef uint64_t bitset64_t;
-#define BITSET64_ARR_LEN(nr_bits)                                              \
+#define BITSET64_LEN(nr_bits)                                                  \
   ((nr_bits) / (8 * sizeof(bitset64_t)) +                                      \
    !!((nr_bits) % (8 + sizeof(bitset64_t))))
 
@@ -132,7 +124,7 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *restrict bitset,
 
 /* Userspace scheduler */
 
-void usersched_init(void);
+void usersched_init(int prohibit_umwait);
 
 /* Boolean representing UMWAIT support on this system set by usersched_init()
  *
@@ -239,8 +231,8 @@ void log_init(const char *ident, int option, int facility, int broadcast_stderr,
 void log_deinit(void);
 
 extern int log_enabled; // Default value is 0 (disabled).
-#define ENABLE_LOG() ((void)(log_enabled = 1))
-#define DISABLE_LOG() ((void)(log_enabled = 0))
+#define log_enable() ((void)(log_enabled = 1))
+#define log_disable() ((void)(log_enabled = 0))
 
 #define LOG_BUFSIZ 4096
 void _log(int level, const char *filename, int line, const char *func,
@@ -287,44 +279,39 @@ void _log_backtrace(int level, const char *filename, int line,
 #define log_backtrace_debug() log_backtrace(LOG_DEBUG)
 
 #define _log_abort()                                                           \
-  {                                                                            \
+  ({                                                                           \
     log_backtrace_emerg();                                                     \
     abort();                                                                   \
-  }                                                                            \
-  (void)0
+  })
 #define _ABORT_MSG "abort"
 #define log_abort(fmt, ...)                                                    \
-  {                                                                            \
+  ({                                                                           \
     !strcmp(fmt, "") ? log_emerg(_ABORT_MSG) : log_emerg(fmt, ##__VA_ARGS__);  \
     _log_abort();                                                              \
-  }                                                                            \
-  (void)0
+  })
 
 #define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
 #define log_assert(expression)                                                 \
-  {                                                                            \
+  ({                                                                           \
     if (!(expression)) {                                                       \
       log_emerg(_ASSERT_MSG(expression));                                      \
       _log_abort();                                                            \
     }                                                                          \
-  }                                                                            \
-  (void)0
+  })
 
 #define log_perror_abort(fmt, ...)                                             \
-  {                                                                            \
+  ({                                                                           \
     if (strcmp(fmt, ""))                                                       \
       log_emerg("%s", strerror(errno));                                        \
     else                                                                       \
       log_emerg("%s: %s", ##__VA_ARGS__, strerror(errno));                     \
     _log_abort();                                                              \
-  }                                                                            \
-  (void)0
+  })
 #define log_perror_assert(expression)                                          \
-  {                                                                            \
+  ({                                                                           \
     if (!(expression))                                                         \
       log_perror_abort(_ASSERT_MSG(expression));                               \
-  }                                                                            \
-  (void)0
+  })
 
 /* [Userspace] END */
 
@@ -340,11 +327,11 @@ void _log_backtrace(int level, const char *filename, int line,
 
 /* Compatibility */
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 4, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
 #define class_create(owner, name) class_create(name)
 #endif
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
 #define msi_desc_to_index(msi_desc) ((msi_desc)->msi_index)
 #else
 #define msi_desc_to_index(msi_desc) ((msi_desc)->msi_attrib.entry_nr)
