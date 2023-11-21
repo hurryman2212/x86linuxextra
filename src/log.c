@@ -15,14 +15,27 @@ static const char *LEVEL_TO_STR[] = {
     "EMERG", "ALERT", "CRIT", "ERR", "WARNING", "NOTICE", "INFO", "DEBUG",
 };
 #define LOG_STDERR_FMT "%s[%d]: %s%s: %s:%d: %s: %s\e[0m\n"
+#define LOG_STDERR_OBFUS_FMT "%s[%d]: %s%s: %s\e[0m\n"
 #define LOG_SYSLOG_FMT "%s%s: %s:%d: %s: %s\e[0m"
+#define LOG_SYSLOG_OBFUS_FMT "%s%s: %s\e[0m"
 #define LOG_BACKTRACE_MSG "Call Trace:"
+#define LOG_ASSERT_MSG "Assertion `%s' failed."
 
-void _log_perror(const char *filename, int line, const char *func,
+void _log_assert(const char *filename, int line, const char *func,
+                 const char *expression, int print_perror) {
+  if (print_perror)
+    _log_perror(LOG_EMERG, filename, line, func, expression);
+  else
+    _log(LOG_EMERG, filename, line, func, LOG_ASSERT_MSG, expression);
+  _log_backtrace(LOG_EMERG, filename, line, func);
+  abort();
+}
+
+void _log_perror(int level, const char *filename, int line, const char *func,
                  const char *s) {
   if (!s || !*(char *)s)
-    return _log(LOG_ERR, filename, line, func, "%s", strerror(errno));
-  return _log(LOG_ERR, filename, line, func, "%s: %s", s, strerror(errno));
+    return _log(level, filename, line, func, "%s", strerror(errno));
+  return _log(level, filename, line, func, "%s: %s", s, strerror(errno));
 }
 void _log(int level, const char *filename, int line, const char *func,
           const char *fmt, ...) {
@@ -33,20 +46,31 @@ void _log(int level, const char *filename, int line, const char *func,
     va_end(ap);
   }
 }
-static _Thread_local char log_buf[LOG_BUFSIZ];
+static _Thread_local char log_buf[LOG_LINE_MAX];
 void _vlog(int level, const char *filename, int line, const char *func,
            const char *fmt, va_list ap) {
   if (unlikely(log_enabled >= level)) {
     if (log_syslog_enabled) {
-      snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level],
-               LEVEL_TO_STR[level], filename, line, func, fmt);
+      if (filename && func)
+        snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_FMT,
+                 LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], filename, line,
+                 func, fmt);
+      else
+        snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_OBFUS_FMT,
+                 LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], fmt);
 
       vsyslog(level, log_buf, ap);
     } else {
-      snprintf(log_buf, sizeof(log_buf), LOG_STDERR_FMT,
-               (self_ident ? self_ident : program_invocation_short_name),
-               usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-               filename, line, func, fmt);
+      if (filename && func)
+        snprintf(log_buf, sizeof(log_buf), LOG_STDERR_FMT,
+                 (self_ident ? self_ident : program_invocation_short_name),
+                 usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+                 filename, line, func, fmt);
+      else
+        snprintf(log_buf, sizeof(log_buf), LOG_STDERR_OBFUS_FMT,
+                 (self_ident ? self_ident : program_invocation_short_name),
+                 usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+                 fmt);
 
       vdprintf(STDERR_FILENO, log_buf, ap);
     }
@@ -60,18 +84,30 @@ void _log_backtrace(int level, const char *filename, int line,
     int size = backtrace(backtrace_buf, LOG_BACKTRACE_MAX);
 
     char **strings;
-    log_perror_assert(strings = backtrace_symbols(backtrace_buf, size));
+    strings = backtrace_symbols(backtrace_buf, size);
 
     if (log_syslog_enabled) {
-      syslog(level, LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-             filename, line, func, LOG_BACKTRACE_MSG);
+      if (filename && func)
+        syslog(level, LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level],
+               LEVEL_TO_STR[level], filename, line, func, LOG_BACKTRACE_MSG);
+      else
+        syslog(level, LOG_SYSLOG_OBFUS_FMT, LEVEL_TO_COLOR[level],
+               LEVEL_TO_STR[level], LOG_BACKTRACE_MSG);
+
       for (int i = 0; i < size; i++)
         syslog(level, " %s", strings[i]);
     } else {
-      dprintf(STDERR_FILENO, LOG_STDERR_FMT,
-              (self_ident ? self_ident : program_invocation_short_name),
-              usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-              filename, line, func, LOG_BACKTRACE_MSG);
+      if (filename && func)
+        dprintf(STDERR_FILENO, LOG_STDERR_FMT,
+                (self_ident ? self_ident : program_invocation_short_name),
+                usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+                filename, line, func, LOG_BACKTRACE_MSG);
+      else
+        dprintf(STDERR_FILENO, LOG_STDERR_OBFUS_FMT,
+                (self_ident ? self_ident : program_invocation_short_name),
+                usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
+                LOG_BACKTRACE_MSG);
+
       for (int i = 0; i < size; i++)
         dprintf(STDERR_FILENO, " %s", strings[i]);
     }

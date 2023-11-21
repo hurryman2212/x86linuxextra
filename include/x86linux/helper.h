@@ -246,7 +246,7 @@ extern int log_enabled; // Default value is -1 (disabled).
 #define log_enable(level) ((void)(log_enabled = level))
 #define log_disable() ((void)(log_enabled = -1))
 
-#define LOG_BUFSIZ 4096
+#define LOG_LINE_MAX 4096
 void _log(int level, const char *filename, int line, const char *func,
           const char *fmt, ...);
 void _vlog(int level, const char *filename, int line, const char *func,
@@ -255,6 +255,7 @@ void _vlog(int level, const char *filename, int line, const char *func,
   _log(level, __filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define vlog(level, fmt, ap)                                                   \
   _vlog(level, __filename__, __LINE__, __func__, fmt, ap)
+
 #define log_emerg(fmt, ...) log(LOG_EMERG, fmt, ##__VA_ARGS__)
 #define log_alert(fmt, ...) log(LOG_ALERT, fmt, ##__VA_ARGS__)
 #define log_crit(fmt, ...) log(LOG_CRIT, fmt, ##__VA_ARGS__)
@@ -272,15 +273,45 @@ void _vlog(int level, const char *filename, int line, const char *func,
 #define vlog_info(fmt, ...) vlog(LOG_INFO, fmt, ##__VA_ARGS__)
 #define vlog_debug(fmt, ...) vlog(LOG_DEBUG, fmt, ##__VA_ARGS__)
 
-void _log_perror(const char *filename, int line, const char *func,
+void _log_perror(int level, const char *filename, int line, const char *func,
                  const char *s);
-#define log_perror(s) _log_perror(__filename__, __LINE__, __func__, s)
+#define log_perror(level, s)                                                   \
+  _log_perror(level, __filename__, __LINE__, __func__, s)
+#define log_perror_on_error(level, expression)                                 \
+  ((void)({ unlikely(expression) == -1 ? log_perror(level, #expression) : 0; }))
+
+#define log_perror_emerg(s) log_perror(LOG_EMERG, s)
+#define log_perror_alert(s) log_perror(LOG_ALERT, s)
+#define log_perror_crit(s) log_perror(LOG_CRIT, s)
+#define log_perror_err(s) log_perror(LOG_ERR, s)
+#define log_perror_warning(s) log_perror(LOG_WARNING, s)
+#define log_perror_notice(s) log_perror(LOG_NOTICE, s)
+#define log_perror_info(s) log_perror(LOG_INFO, s)
+#define log_perror_debug(s) log_perror(LOG_DEBUG, s)
+
+#define log_perror_on_error_emerg(expression)                                  \
+  log_perror_on_error(LOG_EMERG, expression)
+#define log_perror_on_error_alert(expression)                                  \
+  log_perror_on_error(LOG_ALERT, expression)
+#define log_perror_on_error_crit(expression)                                   \
+  log_perror_on_error(LOG_CRIT, expression)
+#define log_perror_on_error_err(expression)                                    \
+  log_perror_on_error(LOG_ERR, expression)
+#define log_perror_on_error_warning(expression)                                \
+  log_perror_on_error(LOG_WARNING, expression)
+#define log_perror_on_error_notice(expression)                                 \
+  log_perror_on_error(LOG_NOTICE, expression)
+#define log_perror_on_error_info(expression)                                   \
+  log_perror_on_error(LOG_INFO, expression)
+#define log_perror_on_error_debug(expression)                                  \
+  log_perror_on_error(LOG_DEBUG, expression)
 
 #define LOG_BACKTRACE_MAX 1024
 void _log_backtrace(int level, const char *filename, int line,
                     const char *func);
 #define log_backtrace(level)                                                   \
   _log_backtrace(level, __filename__, __LINE__, __func__)
+
 #define log_backtrace_emerg() log_backtrace(LOG_EMERG)
 #define log_backtrace_alert() log_backtrace(LOG_ALERT)
 #define log_backtrace_crit() log_backtrace(LOG_CRIT)
@@ -290,40 +321,20 @@ void _log_backtrace(int level, const char *filename, int line,
 #define log_backtrace_info() log_backtrace(LOG_INFO)
 #define log_backtrace_debug() log_backtrace(LOG_DEBUG)
 
-#define _log_abort()                                                           \
-  ({                                                                           \
-    log_backtrace_emerg();                                                     \
-    abort();                                                                   \
-  })
-#define _ABORT_MSG "abort"
-#define log_abort(fmt, ...)                                                    \
-  ({                                                                           \
-    !strcmp(fmt, "") ? log_emerg(_ABORT_MSG) : log_emerg(fmt, ##__VA_ARGS__);  \
-    _log_abort();                                                              \
-  })
-
-#define _ASSERT_MSG(expression) "Assertion `" #expression "' failed."
+void _log_assert(const char *filename, int line, const char *func,
+                 const char *expression, int print_perror);
 #define log_assert(expression)                                                 \
-  ({                                                                           \
-    if (!(expression)) {                                                       \
-      log_emerg(_ASSERT_MSG(expression));                                      \
-      _log_abort();                                                            \
-    }                                                                          \
-  })
-
-#define log_perror_abort(fmt, ...)                                             \
-  ({                                                                           \
-    if (strcmp(fmt, ""))                                                       \
-      log_emerg("%s", strerror(errno));                                        \
-    else                                                                       \
-      log_emerg("%s: %s", ##__VA_ARGS__, strerror(errno));                     \
-    _log_abort();                                                              \
-  })
-#define log_perror_assert(expression)                                          \
-  ({                                                                           \
-    if (!(expression))                                                         \
-      log_perror_abort(_ASSERT_MSG(expression));                               \
-  })
+  ((void)({                                                                    \
+    unlikely(expression) == 0                                                  \
+        ? _log_assert(__filename__, __LINE__, __func__, #expression, 0)        \
+        : 0;                                                                   \
+  }))
+#define log_abort_on_error(expression)                                         \
+  ((void)({                                                                    \
+    unlikely(expression) == -1                                                 \
+        ? _log_assert(__filename__, __LINE__, __func__, #expression, 1)        \
+        : 0;                                                                   \
+  }))
 
 /* [Userspace] END */
 

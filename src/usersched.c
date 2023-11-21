@@ -184,10 +184,10 @@ void usersched_init(int prohibit_umwait) {
     /* Faster path */
 
     ssize_t page_size = sysconf(_SC_PAGESIZE);
-    log_perror_assert((page_size = sysconf(_SC_PAGESIZE)) != -1);
+    log_abort_on_error(page_size = sysconf(_SC_PAGESIZE));
     struct perf_event_mmap_page *pc;
-    log_perror_assert((pc = mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd,
-                                 0)) != MAP_FAILED);
+    log_abort_on_error(pc =
+                           mmap(NULL, page_size, PROT_READ, MAP_SHARED, fd, 0));
 
     /* Check user time support. */
     if (!pc->cap_user_time)
@@ -201,8 +201,8 @@ void usersched_init(int prohibit_umwait) {
     }
 
     /* Clean up. */
-    log_perror_assert(!munmap(pc, page_size));
-    log_perror_assert(!close(fd));
+    log_abort_on_error(munmap(pc, page_size));
+    log_abort_on_error(close(fd));
   }
 
   if (!fast_path) {
@@ -217,22 +217,21 @@ void usersched_init(int prohibit_umwait) {
     asm volatile("cpuid"
                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
                  : "a"(eax));
-    if (!(edx & (1 << 8)))
-      log_abort(
-          "Both perf_event_open() and invariant TSC support is unavailable!");
+    int support_invariant_tsc;
+    log_assert(support_invariant_tsc = edx & (1 << 8));
 
     unsigned int tsc_aux_start, tsc_aux_end;
     unsigned long long tsc_begin, tsc_end, ns_begin, ns_end;
     do {
       struct timespec ts;
 
-      log_perror_assert(!clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
+      log_abort_on_error(clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
       ns_begin = (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec;
       tsc_begin = __rdtscp(&tsc_aux_start);
 
       usleep(USERSCHED_TSC_SETUP_TIMEOUT_US);
 
-      log_perror_assert(!clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
+      log_abort_on_error(clock_gettime(CLOCK_MONOTONIC_RAW, &ts));
       ns_end = (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec;
       tsc_end = __rdtscp(&tsc_aux_end);
 
