@@ -242,9 +242,9 @@ void log_init(const char *ident, int option, int facility, int broadcast_stderr,
 /* Disable logging system and and destruct it. */
 void log_deinit(void);
 
-extern int log_enabled; // Default value is 0 (disabled).
-#define log_enable() ((void)(log_enabled = 1))
-#define log_disable() ((void)(log_enabled = 0))
+extern int log_enabled; // Default value is -1 (disabled).
+#define log_enable(level) ((void)(log_enabled = level))
+#define log_disable() ((void)(log_enabled = -1))
 
 #define LOG_BUFSIZ 4096
 void _log(int level, const char *filename, int line, const char *func,

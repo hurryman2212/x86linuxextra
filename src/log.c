@@ -2,7 +2,7 @@
 
 #include <execinfo.h>
 
-int log_enabled = 0;
+int log_enabled = -1;
 
 static int log_syslog_enabled = 0;
 static const char *self_ident = NULL;
@@ -26,7 +26,7 @@ void _log_perror(const char *filename, int line, const char *func,
 }
 void _log(int level, const char *filename, int line, const char *func,
           const char *fmt, ...) {
-  if (unlikely(log_enabled)) {
+  if (unlikely(log_enabled >= level)) {
     va_list ap;
     va_start(ap, fmt);
     _vlog(level, filename, line, func, fmt, ap);
@@ -36,7 +36,7 @@ void _log(int level, const char *filename, int line, const char *func,
 static _Thread_local char log_buf[LOG_BUFSIZ];
 void _vlog(int level, const char *filename, int line, const char *func,
            const char *fmt, va_list ap) {
-  if (unlikely(log_enabled)) {
+  if (unlikely(log_enabled >= level)) {
     if (log_syslog_enabled) {
       snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level],
                LEVEL_TO_STR[level], filename, line, func, fmt);
@@ -56,7 +56,7 @@ void _vlog(int level, const char *filename, int line, const char *func,
 static _Thread_local void *backtrace_buf[LOG_BACKTRACE_MAX];
 void _log_backtrace(int level, const char *filename, int line,
                     const char *func) {
-  if (unlikely(log_enabled)) {
+  if (unlikely(log_enabled >= level)) {
     int size = backtrace(backtrace_buf, LOG_BACKTRACE_MAX);
 
     char **strings;
