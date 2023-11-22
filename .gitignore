@@ -26,5 +26,7 @@
 !include/**.hpp
 !include/**.hxx
 
+!.vscode/
+
 !module/
 !module/.gitignore
