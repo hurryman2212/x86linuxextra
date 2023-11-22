@@ -1,0 +1,17 @@
+*
+!.gitignore
+
+!.vscode
+!.vscode/update.py
+
+!LICENSE
+
+!Makefile
+
+!dkms.conf
+
+!*.c
+*.mod.c
+!*.h
+
+!*.rules

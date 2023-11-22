@@ -51,7 +51,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
   target_link_options(${PROJECT_NAME}.lto PUBLIC
                       $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_LTO} -Wl,-s>)
 else()
-
   target_compile_options(${PROJECT_NAME}.dbg
                          PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_DBG}>)
   target_compile_options(${PROJECT_NAME}.dbg
@@ -59,17 +58,16 @@ else()
 
   # Set link option to maintain all debug & symbol information.
   target_link_options(${PROJECT_NAME} PUBLIC
-                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM}>)
+                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_NORM} -rdynamic>)
   target_link_options(${PROJECT_NAME} PUBLIC
-                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM}>)
+                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_NORM} -rdynamic>)
   target_link_options(${PROJECT_NAME}.dbg PUBLIC
-                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_DBG}>)
+                      $<$<COMPILE_LANGUAGE:C>:${C_FLAGS_DBG} -rdynamic>)
   target_link_options(${PROJECT_NAME}.dbg PUBLIC
-                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_DBG}>)
+                      $<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAGS_DBG} -rdynamic>)
 endif()
 
 # Set target-specific build options
-set(C_FLAGS_TARGET -mbmi -D_GNU_SOURCE)
 if(NO_UMWAIT STREQUAL "yes" AND FORCE_UMWAIT STREQUAL "yes")
   message(
     FATAL_ERROR "Both `NO_UMWAIT` and `FORCE_UMWAIT` defined! Aborting...")

@@ -1,0 +1,35 @@
+{
+  "env": {
+    "uname": "",
+    "gcc-dumpversion": ""
+  },
+  "configurations": [
+    {
+      "name": "Linux",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "/usr/local/include",
+        "/usr/local/include/**",
+        "/usr/include",
+        "/usr/include/**",
+        "/usr/src/linux-headers-${env:uname}/include",
+        "/usr/src/linux-headers-${env:uname}/include/**",
+        "/usr/src/linux-headers-${env:uname}/arch/x86/include",
+        "/usr/src/linux-headers-${env:uname}/arch/x86/include/**",
+        "/usr/lib/gcc/x86_64-linux-gnu/${env:gcc-dumpversion}/include",
+        "/usr/lib/gcc/x86_64-linux-gnu/${env:gcc-dumpversion}/include/**"
+      ],
+      "defines": [
+        "__KERNEL__",
+        "CONFIG_PAGE_OFFSETUL",
+        "KBUILD_MODFILE=\"\"",
+        "KBUILD_MODNAME=\"\""
+      ],
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "gnu++11",
+      "intelliSenseMode": "linux-gcc-x64"
+    }
+  ],
+  "version": 4
+}

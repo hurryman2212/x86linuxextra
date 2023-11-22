@@ -68,7 +68,7 @@ int spsc_rewind_read(size_t pos_start, size_t *__restrict pos_r, size_t pos_w,
 int spsc_rewind_write(size_t pos_start, size_t pos_r, size_t *__restrict pos_w,
                       size_t pos_end);
 
-/* x86 BMI */
+/* x86 bitwise instructions */
 
 typedef uint64_t bitset64_t;
 #define BITSET64_LEN(nr_bits)                                                  \
@@ -84,8 +84,6 @@ int x86_unset_bit_atomic(bitset64_t *__restrict bitset, uint32_t idx);
 
 int64_t x86_search_lowest_bit(const bitset64_t *__restrict bitset,
                               uint32_t start_idx, uint32_t last_idx);
-int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *__restrict bitset,
-                                         uint32_t start_idx, uint32_t last_idx);
 int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
                                      const bitset64_t *__restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx);
@@ -101,16 +99,16 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
 #define __filename__                                                           \
   (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-/* Memory barrier */
-
-#define barrier() __asm__ __volatile__("" : : : "memory")
-
 /* Static branch prediction */
 
 /* unlikely() should be prioritized over likely()! (?) */
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
 /* Use of likely() is discouraged! Try to use unlikely(). (?) */
 #define likely(expr) __builtin_expect(!!(expr), 1)
+
+/* Memory barrier */
+
+#define barrier() __asm__ __volatile__("" : : : "memory")
 
 /* x86 UMWAIT */
 
@@ -386,6 +384,34 @@ void _log_assert_perror_fail(const char *filename, int line, const char *func,
 #else
 
 /* [Kernel] BEGIN */
+
+/* Types */
+
+typedef s8 int8_t;
+#define INT8_MIN S8_MIN
+#define INT8_MAX S8_MAX
+typedef s16 int16_t;
+#define INT16_MIN S16_MIN
+#define INT16_MAX S16_MAX
+typedef s32 int32_t;
+#define INT32_MIN S32_MIN
+#define INT32_MAX S32_MAX
+typedef s64 int64_t;
+#define INT64_MIN S64_MIN
+#define INT64_MAX S64_MAX
+
+typedef u8 uint8_t;
+#define UINT8_MIN U8_MIN
+#define UINT8_MAX U8_MAX
+typedef u16 uint16_t;
+#define UINT16_MIN U16_MIN
+#define UINT16_MAX U16_MAX
+typedef u32 uint32_t;
+#define UINT32_MIN U32_MIN
+#define UINT32_MAX U32_MAX
+typedef u64 uint64_t;
+#define UINT64_MIN U64_MIN
+#define UINT64_MAX U64_MAX
 
 /* Base name of file */
 

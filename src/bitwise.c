@@ -52,29 +52,21 @@ int64_t x86_search_lowest_bit(const bitset64_t *__restrict bitset,
   if (tmp) {
     bitset64_t res = *(bitset + (start_idx >> 6)) & (UINT64_MAX << tmp);
     if (res)
-      return ((start_idx & -0x40) + __bsfq(res) > last_idx)
+      return ((start_idx & -0x40) + __builtin_ctzll(res) > last_idx)
                  ? -1
-                 : (int64_t)((start_idx & -0x40) + __bsfq(res));
+                 : (int64_t)((start_idx & -0x40) + __builtin_ctzll(res));
   }
 
   tmp = ((start_idx >> 6) + !!tmp);
   while (likely((last_idx >> 6) >= tmp)) {
     bitset64_t res = *(bitset + tmp);
     if (res) {
-      res = __bsfq(res);
+      res = __builtin_ctzll(res);
       return ((tmp << 6) + res > last_idx) ? -1 : (int64_t)((tmp << 6) + res);
     }
     ++tmp;
   }
   return -1;
-}
-int64_t x86_consume_lowest_bit_nonatomic(bitset64_t *__restrict bitset,
-                                         uint32_t start_idx,
-                                         uint32_t last_idx) {
-  int64_t res = x86_search_lowest_bit(bitset, start_idx, last_idx);
-  if (res >= 0)
-    *(bitset + (res >> 6)) = __blsr_u64(*(bitset + (res >> 6)));
-  return res;
 }
 int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
                                      const bitset64_t *__restrict bitset2,
@@ -84,19 +76,29 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
     bitset64_t res = *(bitset + (start_idx >> 6)) &
                      *(bitset2 + (start_idx >> 6)) & (UINT64_MAX << tmp);
     if (res)
-      return ((start_idx & -0x40) + __bsfq(res) > last_idx)
+      return ((start_idx & -0x40) + __builtin_ctzll(res) > last_idx)
                  ? -1
-                 : (int64_t)((start_idx & -0x40) + __bsfq(res));
+                 : (int64_t)((start_idx & -0x40) + __builtin_ctzll(res));
   }
 
   tmp = ((start_idx >> 6) + !!tmp);
   while (likely((last_idx >> 6) >= tmp)) {
     bitset64_t res = *(bitset + tmp) & *(bitset2 + tmp);
     if (res) {
-      res = __bsfq(res);
+      res = __builtin_ctzll(res);
       return ((tmp << 6) + res > last_idx) ? -1 : (int64_t)((tmp << 6) + res);
     }
     ++tmp;
   }
   return -1;
 }
+
+#ifdef __KERNEL__
+EXPORT_SYMBOL(x86_test_bit);
+EXPORT_SYMBOL(x86_set_bit_nonatomic);
+EXPORT_SYMBOL(x86_unset_bit_nonatomic);
+EXPORT_SYMBOL(x86_set_bit_atomic);
+EXPORT_SYMBOL(x86_unset_bit_atomic);
+EXPORT_SYMBOL(x86_search_lowest_bit);
+EXPORT_SYMBOL(x86_search_lowest_common_bit);
+#endif
