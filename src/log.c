@@ -1,5 +1,10 @@
 #include "x86linux/helper.h"
 
+#include <errno.h>
+#include <stdio.h>
+
+#include <unistd.h>
+
 #include <execinfo.h>
 
 int log_enabled = -1;
@@ -20,22 +25,33 @@ static const char *LEVEL_TO_STR[] = {
 #define LOG_SYSLOG_OBFUS_FMT "%s%s: %s\e[0m"
 #define LOG_BACKTRACE_MSG "Call Trace:"
 #define LOG_ASSERT_MSG "Assertion `%s' failed."
+#define LOG_ABORT_MSG "Aborted."
 
-void _log_assert(const char *filename, int line, const char *func,
-                 const char *expression, int print_perror) {
-  if (print_perror)
-    _log_perror(LOG_EMERG, filename, line, func, expression);
-  else
-    _log(LOG_EMERG, filename, line, func, LOG_ASSERT_MSG, expression);
+void _log_assert_fail(const char *filename, int line, const char *func,
+                      const char *expression) {
+  _log(LOG_EMERG, filename, line, func, LOG_ASSERT_MSG, expression);
+  _log_abort(filename, line, func);
+}
+void _log_assert_perror_fail(const char *filename, int line, const char *func,
+                             const char *expression, int errnum) {
+  _log_perror(LOG_EMERG, filename, line, func, expression, errnum);
+  _log_abort(filename, line, func);
+}
+void _log_abort(const char *filename, int line, const char *func) {
+  _log(LOG_EMERG, filename, line, func, LOG_ABORT_MSG);
   _log_backtrace(LOG_EMERG, filename, line, func);
   abort();
 }
 
 void _log_perror(int level, const char *filename, int line, const char *func,
-                 const char *s) {
+                 const char *s, int errnum) {
+  if (errnum == -1)
+    errnum = errno;
+  const char *errnumdesc = strerrordesc_np(errnum);
+
   if (!s || !*(char *)s)
-    return _log(level, filename, line, func, "%s", strerror(errno));
-  return _log(level, filename, line, func, "%s: %s", s, strerror(errno));
+    return _log(level, filename, line, func, "%s", errnumdesc);
+  return _log(level, filename, line, func, "%s: %s", s, errnumdesc);
 }
 void _log(int level, const char *filename, int line, const char *func,
           const char *fmt, ...) {
@@ -95,7 +111,7 @@ void _log_backtrace(int level, const char *filename, int line,
                LEVEL_TO_STR[level], LOG_BACKTRACE_MSG);
 
       for (int i = 0; i < size; i++)
-        syslog(level, " %s", strings[i]);
+        syslog(level, " %s%s\e[0m", LEVEL_TO_COLOR[level], strings[i]);
     } else {
       if (filename && func)
         dprintf(STDERR_FILENO, LOG_STDERR_FMT,
@@ -109,7 +125,8 @@ void _log_backtrace(int level, const char *filename, int line,
                 LOG_BACKTRACE_MSG);
 
       for (int i = 0; i < size; i++)
-        dprintf(STDERR_FILENO, " %s", strings[i]);
+        dprintf(STDERR_FILENO, " %s%s\e[0m\n", LEVEL_TO_COLOR[level],
+                strings[i]);
     }
 
     free(strings);

@@ -9,23 +9,16 @@
 /* [Userspace] BEGIN */
 
 #ifdef __cplusplus
-#include <cerrno>
 #include <cstdarg>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #else
-#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #endif
 
-#include <sys/syslog.h>
-#include <sys/unistd.h>
+#include <syslog.h>
 
 #include <x86intrin.h>
 
@@ -70,8 +63,10 @@ size_t spsc_read_peek(size_t pos_r, size_t pos_w, size_t pos_end,
 size_t spsc_write_peek(size_t pos_r, size_t pos_w, size_t pos_end,
                        size_t req_size);
 
-void spsc_rewind_read(size_t *__restrict pos_r, size_t pos_w, size_t pos_end);
-void spsc_rewind_write(size_t pos_r, size_t *__restrict pos_w, size_t pos_end);
+int spsc_rewind_read(size_t pos_start, size_t *__restrict pos_r, size_t pos_w,
+                     size_t pos_end);
+int spsc_rewind_write(size_t pos_start, size_t pos_r, size_t *__restrict pos_w,
+                      size_t pos_end);
 
 /* x86 BMI */
 
@@ -132,6 +127,12 @@ pid_t usersched_gettid(void);
 void usersched_init(int prohibit_umwait);
 
 /**
+ * Boolean of Invariant TSC support on this system set by usersched_init() call
+ *
+ * (default value is 0 (unavailable))
+ */
+extern int usersched_support_invariant_tsc;
+/**
  * Boolean of UMWAIT support on this system set by usersched_init() call
  *
  * (default value is 0 (unavailable))
@@ -148,7 +149,7 @@ extern uint64_t usersched_tsc_freq;
 /**
  * TSC per 1us on this set by usersched_init() call
  *
- * ((TSC per us) = (TSC per sec.) / 10^6)
+ * ((TSC per us) = (TSC freq. = TSC per sec.) / 10^6)
  * */
 extern uint32_t usersched_tsc_1us;
 
@@ -264,22 +265,19 @@ void _vlog(int level, const char *filename, int line, const char *func,
 #define log_notice(fmt, ...) log(LOG_NOTICE, fmt, ##__VA_ARGS__)
 #define log_info(fmt, ...) log(LOG_INFO, fmt, ##__VA_ARGS__)
 #define log_debug(fmt, ...) log(LOG_DEBUG, fmt, ##__VA_ARGS__)
-#define vlog_emerg(fmt, ...) vlog(LOG_EMERG, fmt, ##__VA_ARGS__)
-#define vlog_alert(fmt, ...) vlog(LOG_ALERT, fmt, ##__VA_ARGS__)
-#define vlog_crit(fmt, ...) vlog(LOG_CRIT, fmt, ##__VA_ARGS__)
-#define vlog_err(fmt, ...) vlog(LOG_ERR, fmt, ##__VA_ARGS__)
-#define vlog_warning(fmt, ...) vlog(LOG_WARNING, fmt, ##__VA_ARGS__)
-#define vlog_notice(fmt, ...) vlog(LOG_NOTICE, fmt, ##__VA_ARGS__)
-#define vlog_info(fmt, ...) vlog(LOG_INFO, fmt, ##__VA_ARGS__)
-#define vlog_debug(fmt, ...) vlog(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define vlog_emerg(fmt, ap) vlog(LOG_EMERG, fmt, ap)
+#define vlog_alert(fmt, ap) vlog(LOG_ALERT, fmt, ap)
+#define vlog_crit(fmt, ap) vlog(LOG_CRIT, fmt, ap)
+#define vlog_err(fmt, ap) vlog(LOG_ERR, fmt, ap)
+#define vlog_warning(fmt, ap) vlog(LOG_WARNING, fmt, ap)
+#define vlog_notice(fmt, ap) vlog(LOG_NOTICE, fmt, ap)
+#define vlog_info(fmt, ap) vlog(LOG_INFO, fmt, ap)
+#define vlog_debug(fmt, ap) vlog(LOG_DEBUG, fmt, ap)
 
 void _log_perror(int level, const char *filename, int line, const char *func,
-                 const char *s);
+                 const char *s, int errnum);
 #define log_perror(level, s)                                                   \
-  _log_perror(level, __filename__, __LINE__, __func__, s)
-#define log_perror_on_error(level, expression)                                 \
-  ((void)({ unlikely(expression) == -1 ? log_perror(level, #expression) : 0; }))
-
+  _log_perror(level, __filename__, __LINE__, __func__, s, -1)
 #define log_perror_emerg(s) log_perror(LOG_EMERG, s)
 #define log_perror_alert(s) log_perror(LOG_ALERT, s)
 #define log_perror_crit(s) log_perror(LOG_CRIT, s)
@@ -288,6 +286,18 @@ void _log_perror(int level, const char *filename, int line, const char *func,
 #define log_perror_notice(s) log_perror(LOG_NOTICE, s)
 #define log_perror_info(s) log_perror(LOG_INFO, s)
 #define log_perror_debug(s) log_perror(LOG_DEBUG, s)
+
+#define log_perror_on_error(level, expression)                                 \
+  ({                                                                           \
+    if (unlikely(value_cast(expression, int) == -1))                           \
+      log_perror(level, #expression);                                          \
+  })
+#define log_perror_if_errno(level, expression)                                 \
+  ({                                                                           \
+    if (unlikely(expression))                                                  \
+      _log_perror(level, __filename__, __LINE__, __func__, #expression,        \
+                  value_cast(expression, int));                                \
+  })
 
 #define log_perror_on_error_emerg(expression)                                  \
   log_perror_on_error(LOG_EMERG, expression)
@@ -305,6 +315,22 @@ void _log_perror(int level, const char *filename, int line, const char *func,
   log_perror_on_error(LOG_INFO, expression)
 #define log_perror_on_error_debug(expression)                                  \
   log_perror_on_error(LOG_DEBUG, expression)
+#define log_perror_if_errno_emerg(expression)                                  \
+  log_perror_if_errno(LOG_EMERG, expression)
+#define log_perror_if_errno_alert(expression)                                  \
+  log_perror_if_errno(LOG_ALERT, expression)
+#define log_perror_if_errno_crit(expression)                                   \
+  log_perror_if_errno(LOG_CRIT, expression)
+#define log_perror_if_errno_err(expression)                                    \
+  log_perror_if_errno(LOG_ERR, expression)
+#define log_perror_if_errno_warning(expression)                                \
+  log_perror_if_errno(LOG_WARNING, expression)
+#define log_perror_if_errno_notice(expression)                                 \
+  log_perror_if_errno(LOG_NOTICE, expression)
+#define log_perror_if_errno_info(expression)                                   \
+  log_perror_if_errno(LOG_INFO, expression)
+#define log_perror_if_errno_debug(expression)                                  \
+  log_perror_if_errno(LOG_DEBUG, expression)
 
 #define LOG_BACKTRACE_MAX 1024
 void _log_backtrace(int level, const char *filename, int line,
@@ -321,20 +347,39 @@ void _log_backtrace(int level, const char *filename, int line,
 #define log_backtrace_info() log_backtrace(LOG_INFO)
 #define log_backtrace_debug() log_backtrace(LOG_DEBUG)
 
-void _log_assert(const char *filename, int line, const char *func,
-                 const char *expression, int print_perror);
-#define log_assert(expression)                                                 \
-  ((void)({                                                                    \
-    unlikely(expression) == 0                                                  \
-        ? _log_assert(__filename__, __LINE__, __func__, #expression, 0)        \
-        : 0;                                                                   \
-  }))
+void _log_abort(const char *filename, int line, const char *func);
+#define log_abort() _log_abort(__filename__, __LINE__, __func__)
+
+void _log_assert_fail(const char *filename, int line, const char *func,
+                      const char *expression);
+void _log_assert_perror_fail(const char *filename, int line, const char *func,
+                             const char *expression, int errnum);
+#define log_abort_if_false(expression)                                         \
+  ({                                                                           \
+    if (unlikely(!(expression)))                                               \
+      _log_assert_fail(__filename__, __LINE__, __func__, #expression);         \
+  })
 #define log_abort_on_error(expression)                                         \
-  ((void)({                                                                    \
-    unlikely(expression) == -1                                                 \
-        ? _log_assert(__filename__, __LINE__, __func__, #expression, 1)        \
-        : 0;                                                                   \
-  }))
+  ({                                                                           \
+    if (unlikely(value_cast(expression, int) == -1))                           \
+      _log_assert_perror_fail(__filename__, __LINE__, __func__, #expression,   \
+                              -1);                                             \
+  })
+#define log_abort_if_errno(expression)                                         \
+  ({                                                                           \
+    if (unlikely(expression))                                                  \
+      _log_assert_perror_fail(__filename__, __LINE__, __func__, #expression,   \
+                              value_cast(expression, int));                    \
+  })
+#ifndef NDEBUG
+#define log_assert(expression) log_abort_if_false(expression)
+#define log_assert_perror(expression) log_abort_on_error(expression)
+#define log_assert_errno(expression) log_abort_if_errno(expression)
+#else
+#define log_assert(expression)
+#define log_assert_perror(expression)
+#define log_assert_errno(expression)
+#endif
 
 /* [Userspace] END */
 

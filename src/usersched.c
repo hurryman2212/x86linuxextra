@@ -1,15 +1,19 @@
-#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
-#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
-#endif
-
 #include "x86linux/helper.h"
 
 #include <time.h>
 
+#include <syscall.h>
+#include <unistd.h>
+
 #include <sys/mman.h>
-#include <sys/syscall.h>
 
 #include <linux/perf_event.h>
+
+int usersched_support_invariant_tsc = 0;
+int usersched_support_umwait = 0;
+
+uint64_t usersched_tsc_freq = 1000 * 1000 * 1000;
+uint32_t usersched_tsc_1us = 1000;
 
 unsigned long long _user_schedule_start(uint32_t timeout_tsc) {
   /* Do not return UINT32_MAX and 0 for valid absolute TSC value! */
@@ -28,24 +32,6 @@ unsigned long long _user_schedule_start(uint32_t timeout_tsc) {
   return unlikely((tsc + timeout_tsc) == UINT64_MAX) ? (UINT64_MAX - 1)
                                                      : (tsc + timeout_tsc);
 }
-
-uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc) {
-  /* Do not return UINT64_MAX for valid absolute TSC value! */
-
-  /* Ignore expansive RDTSC instruction. */
-  if (!abs_timeout_tsc || (abs_timeout_tsc == UINT64_MAX))
-    return (uint32_t)abs_timeout_tsc;
-
-  unsigned long long tsc = _rdtsc();
-
-  if (unlikely((abs_timeout_tsc ^ tsc) & INT64_MIN))
-    /* TSC overflow */
-    return (abs_timeout_tsc & INT64_MIN)
-               ? 0
-               : (abs_timeout_tsc + (UINT64_MAX - tsc));
-  return (abs_timeout_tsc <= tsc) ? 0 : (abs_timeout_tsc - tsc);
-}
-int usersched_support_umwait = 0;
 uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
                           const volatile uint32_t *__restrict uaddr32,
                           uint32_t old_val32) {
@@ -126,9 +112,23 @@ uint32_t _user_reschedule(unsigned long long abs_timeout_tsc,
 
   return 1;
 }
+uint32_t _user_update_timeout_tsc(unsigned long long abs_timeout_tsc) {
+  /* Do not return UINT64_MAX for valid absolute TSC value! */
 
-uint64_t usersched_tsc_freq = 1000 * 1000 * 1000;
-uint32_t usersched_tsc_1us = 1000;
+  /* Ignore expansive RDTSC instruction. */
+  if (!abs_timeout_tsc || (abs_timeout_tsc == UINT64_MAX))
+    return (uint32_t)abs_timeout_tsc;
+
+  unsigned long long tsc = _rdtsc();
+
+  if (unlikely((abs_timeout_tsc ^ tsc) & INT64_MIN))
+    /* TSC overflow */
+    return (abs_timeout_tsc & INT64_MIN)
+               ? 0
+               : (abs_timeout_tsc + (UINT64_MAX - tsc));
+  return (abs_timeout_tsc <= tsc) ? 0 : (abs_timeout_tsc - tsc);
+}
+
 /* Setup global variables for 1us TSC value and UMWAIT support. */
 void usersched_init(int prohibit_umwait) {
   struct perf_event_attr pe = {
@@ -147,31 +147,6 @@ void usersched_init(int prohibit_umwait) {
       .exclude_callchain_user = 1,
   };
   uint32_t eax, ebx, ecx, edx;
-
-#if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
-  if (!prohibit_umwait) {
-#endif
-
-#ifndef _NO_UMWAIT
-    /* Check UMWAIT support. */
-    eax = 7;
-    ecx = 0;
-    asm volatile("cpuid"
-                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                 : "a"(eax), "c"(ecx));
-    usersched_support_umwait = !!(ecx & (1 << 5));
-#else
-  usersched_support_umwait = 0;
-#endif
-
-#ifdef _FORCE_UMWAIT
-    if (!usersched_support_umwait)
-      log_abort("No UMWAIT support present inside UMWAIT-dependent build!");
-#endif
-
-#if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
-  }
-#endif
 
   /* Get TSC frequency. */
 
@@ -208,18 +183,6 @@ void usersched_init(int prohibit_umwait) {
   if (!fast_path) {
     /* Slower path */
 
-    /**
-     * Check Invariant TSC.
-     *
-     * If not available, give up.
-     */
-    eax = 0x80000007;
-    asm volatile("cpuid"
-                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                 : "a"(eax));
-    int support_invariant_tsc;
-    log_assert(support_invariant_tsc = edx & (1 << 8));
-
     unsigned int tsc_aux_start, tsc_aux_end;
     unsigned long long tsc_begin, tsc_end, ns_begin, ns_end;
     do {
@@ -244,9 +207,43 @@ void usersched_init(int prohibit_umwait) {
     /* (TSC per us) = (TSC per sec.) / 10^6 */
     usersched_tsc_1us = usersched_tsc_freq / (1000 * 1000);
   }
+
+  /* Check Invariant TSC support. */
+  eax = 0x80000007;
+  asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(eax));
+  usersched_support_invariant_tsc = edx & (1 << 8);
+
+#if defined(_FORCE_UMWAIT) && defined(_NO_UMWAIT)
+#error Both _FORCE_UMWAIT and _NO_UMWAIT are defined!
+#endif
+
+#if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
+  if (!prohibit_umwait) {
+#endif
+
+#ifndef _NO_UMWAIT
+    /* Check UMWAIT support. */
+    eax = 7;
+    ecx = 0;
+    asm volatile("cpuid"
+                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                 : "a"(eax), "c"(ecx));
+    usersched_support_umwait = !!(ecx & (1 << 5));
+#else
+  usersched_support_umwait = 0;
+#endif
+
+#ifdef _FORCE_UMWAIT
+    log_abort_if_false(usersched_support_umwait);
+#endif
+
+#if !defined(_FORCE_UMWAIT) && !defined(_NO_UMWAIT)
+  }
+#endif
 }
 
-static _Thread_local pid_t usersched_tid = 0;
+static _Thread_local pid_t _usersched_tid = 0;
 pid_t usersched_gettid(void) {
-  return unlikely(!usersched_tid) ? (usersched_tid = gettid()) : usersched_tid;
+  return unlikely(!_usersched_tid) ? (_usersched_tid = gettid())
+                                   : _usersched_tid;
 }
