@@ -35,12 +35,12 @@ all:
 	ar -rcs $(TARGET).a $(MY-OBJS)
 	cp /var/lib/dkms/$(TARGET)/$(TARGET_VERSION)/build/$(TARGET).a /lib/modules/$(KVER)/updates/dkms/ 2>/dev/null || true
 
-	rm -rf $(shell printf " $(M)/%s" $(notdir $(EXTERN)))
+	rm -rf $(notdir $(EXTERN))
 
 install:
 	cp -r $(EXTERN) $(M)/ 2>/dev/null || true
 	dkms install "$(M)" --force
-	rm -rf $(shell printf " $(M)/%s" $(notdir $(EXTERN)))
+	rm -rf $(notdir $(EXTERN))
 
 	cp *.rules /etc/udev/rules.d/ 2>/dev/null || true
 uninstall:
@@ -57,4 +57,4 @@ unload:
 
 clean:
 	make -C $(KDIR) KVER=$(shell uname -r) KDIR=/lib/modules/$(shell uname -r)/build M=$(shell pwd) clean
-	rm -rf $(shell printf " $(M)/%s" $(notdir $(EXTERN)))
+	rm -rf $(notdir $(EXTERN))
