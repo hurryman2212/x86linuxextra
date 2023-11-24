@@ -55,10 +55,3 @@ int spsc_rewind_write(size_t pos_start, size_t pos_r, size_t *__restrict pos_w,
   }
   return 0;
 }
-
-#ifdef __KERNEL__
-EXPORT_SYMBOL(spsc_read_peek);
-EXPORT_SYMBOL(spsc_write_peek);
-EXPORT_SYMBOL(spsc_rewind_read);
-EXPORT_SYMBOL(spsc_rewind_write);
-#endif

@@ -1,31 +1,37 @@
 #include "x86linux/helper.h"
 
+#ifndef __KERNEL__
 #include <errno.h>
 #include <stdio.h>
 
 #include <unistd.h>
 
 #include <execinfo.h>
+#endif
 
 int log_enabled = -1;
 
-static int log_syslog_enabled = 0;
-static const char *self_ident = NULL;
-
-static const char *LEVEL_TO_COLOR[] = {
+#ifndef __KERNEL__
+static const char *const __restrict LOG_LEVEL_TO_COLOR[] = {
     "\e[1;41;37m", "\e[1;101m", "\e[101m", "\e[1;31m",
     "\e[1;33m",    "\e[1;34m",  "\e[34m",  "\e[2m",
 };
-static const char *LEVEL_TO_STR[] = {
+static const char *const __restrict LOG_LEVEL_TO_STR[] = {
     "EMERG", "ALERT", "CRIT", "ERR", "WARNING", "NOTICE", "INFO", "DEBUG",
 };
-#define LOG_STDERR_FMT "%s[%d]: %s%s: %s:%d: %s: %s\e[0m\n"
-#define LOG_STDERR_OBFUS_FMT "%s[%d]: %s%s: %s\e[0m\n"
-#define LOG_SYSLOG_FMT "%s%s: %s:%d: %s: %s\e[0m"
-#define LOG_SYSLOG_OBFUS_FMT "%s%s: %s\e[0m"
-#define LOG_BACKTRACE_MSG "Call Trace:"
-#define LOG_ASSERT_MSG "Assertion `%s' failed."
-#define LOG_ABORT_MSG "Aborted."
+
+static const char *const __restrict LOG_STDERR_FMT =
+    "%s[%d]: %s%s: %s:%d: %s: %s\e[0m\n";
+static const char *const __restrict LOG_STDERR_OBFUS_FMT =
+    "%s[%d]: %s%s: %s\e[0m\n";
+static const char *const __restrict LOG_SYSLOG_FMT = "%s%s: %s:%d: %s: %s\e[0m";
+static const char *const __restrict LOG_SYSLOG_OBFUS_FMT = "%s%s: %s\e[0m";
+static const char *const __restrict LOG_BACKTRACE_MSG = "Call Trace:";
+static const char *const __restrict LOG_ASSERT_MSG = "Assertion `%s' failed.";
+static const char *const __restrict LOG_ABORT_MSG = "Aborted.";
+
+static int log_syslog_enabled = 0;
+static const char *self_ident = NULL;
 
 void _log_assert_fail(const char *filename, int line, const char *func,
                       const char *expression) {
@@ -53,8 +59,9 @@ void _log_perror(int level, const char *filename, int line, const char *func,
     return _log(level, filename, line, func, "%s", errnumdesc);
   return _log(level, filename, line, func, "%s: %s", s, errnumdesc);
 }
-void _log(int level, const char *filename, int line, const char *func,
-          const char *fmt, ...) {
+__attribute__((format(printf, 5, 6))) void _log(int level, const char *filename,
+                                                int line, const char *func,
+                                                const char *fmt, ...) {
   if (unlikely(log_enabled >= level)) {
     va_list ap;
     va_start(ap, fmt);
@@ -62,40 +69,41 @@ void _log(int level, const char *filename, int line, const char *func,
     va_end(ap);
   }
 }
-static _Thread_local char log_buf[LOG_LINE_MAX];
 void _vlog(int level, const char *filename, int line, const char *func,
            const char *fmt, va_list ap) {
+  static _Thread_local char buf[LOG_LINE_MAX];
+
   if (unlikely(log_enabled >= level)) {
     if (log_syslog_enabled) {
       if (filename && func)
-        snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_FMT,
-                 LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], filename, line,
-                 func, fmt);
+        snprintf(buf, sizeof(buf), LOG_SYSLOG_FMT, LOG_LEVEL_TO_COLOR[level],
+                 LOG_LEVEL_TO_STR[level], filename, line, func, fmt);
       else
-        snprintf(log_buf, sizeof(log_buf), LOG_SYSLOG_OBFUS_FMT,
-                 LEVEL_TO_COLOR[level], LEVEL_TO_STR[level], fmt);
+        snprintf(buf, sizeof(buf), LOG_SYSLOG_OBFUS_FMT,
+                 LOG_LEVEL_TO_COLOR[level], LOG_LEVEL_TO_STR[level], fmt);
 
-      vsyslog(level, log_buf, ap);
+      vsyslog(level, buf, ap);
     } else {
       if (filename && func)
-        snprintf(log_buf, sizeof(log_buf), LOG_STDERR_FMT,
+        snprintf(buf, sizeof(buf), LOG_STDERR_FMT,
                  (self_ident ? self_ident : program_invocation_short_name),
-                 usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-                 filename, line, func, fmt);
+                 usersched_gettid(), LOG_LEVEL_TO_COLOR[level],
+                 LOG_LEVEL_TO_STR[level], filename, line, func, fmt);
       else
-        snprintf(log_buf, sizeof(log_buf), LOG_STDERR_OBFUS_FMT,
+        snprintf(buf, sizeof(buf), LOG_STDERR_OBFUS_FMT,
                  (self_ident ? self_ident : program_invocation_short_name),
-                 usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-                 fmt);
+                 usersched_gettid(), LOG_LEVEL_TO_COLOR[level],
+                 LOG_LEVEL_TO_STR[level], fmt);
 
-      vdprintf(STDERR_FILENO, log_buf, ap);
+      vdprintf(STDERR_FILENO, buf, ap);
     }
   }
 }
 
-static _Thread_local void *backtrace_buf[LOG_BACKTRACE_MAX];
 void _log_backtrace(int level, const char *filename, int line,
                     const char *func) {
+  static _Thread_local void *backtrace_buf[LOG_BACKTRACE_MAX];
+
   if (unlikely(log_enabled >= level)) {
     int size = backtrace(backtrace_buf, LOG_BACKTRACE_MAX);
 
@@ -104,28 +112,30 @@ void _log_backtrace(int level, const char *filename, int line,
 
     if (log_syslog_enabled) {
       if (filename && func)
-        syslog(level, LOG_SYSLOG_FMT, LEVEL_TO_COLOR[level],
-               LEVEL_TO_STR[level], filename, line, func, LOG_BACKTRACE_MSG);
+        syslog(level, LOG_SYSLOG_FMT, LOG_LEVEL_TO_COLOR[level],
+               LOG_LEVEL_TO_STR[level], filename, line, func,
+               LOG_BACKTRACE_MSG);
       else
-        syslog(level, LOG_SYSLOG_OBFUS_FMT, LEVEL_TO_COLOR[level],
-               LEVEL_TO_STR[level], LOG_BACKTRACE_MSG);
+        syslog(level, LOG_SYSLOG_OBFUS_FMT, LOG_LEVEL_TO_COLOR[level],
+               LOG_LEVEL_TO_STR[level], LOG_BACKTRACE_MSG);
 
       for (int i = 0; i < size; i++)
-        syslog(level, " %s%s\e[0m", LEVEL_TO_COLOR[level], strings[i]);
+        syslog(level, " %s%s\e[0m", LOG_LEVEL_TO_COLOR[level], strings[i]);
     } else {
       if (filename && func)
         dprintf(STDERR_FILENO, LOG_STDERR_FMT,
                 (self_ident ? self_ident : program_invocation_short_name),
-                usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-                filename, line, func, LOG_BACKTRACE_MSG);
+                usersched_gettid(), LOG_LEVEL_TO_COLOR[level],
+                LOG_LEVEL_TO_STR[level], filename, line, func,
+                LOG_BACKTRACE_MSG);
       else
         dprintf(STDERR_FILENO, LOG_STDERR_OBFUS_FMT,
                 (self_ident ? self_ident : program_invocation_short_name),
-                usersched_gettid(), LEVEL_TO_COLOR[level], LEVEL_TO_STR[level],
-                LOG_BACKTRACE_MSG);
+                usersched_gettid(), LOG_LEVEL_TO_COLOR[level],
+                LOG_LEVEL_TO_STR[level], LOG_BACKTRACE_MSG);
 
       for (int i = 0; i < size; i++)
-        dprintf(STDERR_FILENO, " %s%s\e[0m\n", LEVEL_TO_COLOR[level],
+        dprintf(STDERR_FILENO, " %s%s\e[0m\n", LOG_LEVEL_TO_COLOR[level],
                 strings[i]);
     }
 
@@ -160,3 +170,4 @@ void log_deinit(void) {
     log_syslog_enabled = 0;
   }
 }
+#endif

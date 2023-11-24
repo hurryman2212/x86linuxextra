@@ -23,7 +23,8 @@
         "__KERNEL__",
         "CONFIG_PAGE_OFFSETUL",
         "KBUILD_MODFILE=\"\"",
-        "KBUILD_MODNAME=\"\""
+        "KBUILD_MODNAME=\"\"",
+        "__TARGET_VERSION__=\"\""
       ],
       "compilerPath": "/usr/bin/gcc",
       "cStandard": "gnu11",

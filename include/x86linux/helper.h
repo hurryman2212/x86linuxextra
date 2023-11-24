@@ -41,6 +41,11 @@ extern "C" {
 
 /* [Common] BEGIN */
 
+/* Preprocessor */
+
+#define STR(macro) #macro
+#define STR_VAL(macro) STR(macro)
+
 /* Casting */
 
 #define address_cast(value) ((void *)(uintptr_t)(value))
@@ -87,6 +92,12 @@ int64_t x86_search_lowest_bit(const bitset64_t *__restrict bitset,
 int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
                                      const bitset64_t *__restrict bitset2,
                                      uint32_t start_idx, uint32_t last_idx);
+
+/* Log */
+
+extern int log_enabled; // Default value is -1 (disabled).
+#define log_enable(level) ((void)(log_enabled = level))
+#define log_disable() ((void)(log_enabled = -1))
 
 /* [Common] END */
 
@@ -235,19 +246,16 @@ enum _USERSCHED_COND {
 
 /* Log */
 
-/* Setup logging system and enable it. */
+/* Prepare the logging system; You still need to call log_enable() after. */
 void log_init(const char *ident, int option, int facility, int broadcast_stderr,
               int broadcast_syslog);
-/* Disable logging system and and destruct it. */
+/* Disable the logging system and and destruct it. */
 void log_deinit(void);
 
-extern int log_enabled; // Default value is -1 (disabled).
-#define log_enable(level) ((void)(log_enabled = level))
-#define log_disable() ((void)(log_enabled = -1))
-
 #define LOG_LINE_MAX 4096
-void _log(int level, const char *filename, int line, const char *func,
-          const char *fmt, ...);
+__attribute__((format(printf, 5, 6))) void _log(int level, const char *filename,
+                                                int line, const char *func,
+                                                const char *fmt, ...);
 void _vlog(int level, const char *filename, int line, const char *func,
            const char *fmt, va_list ap);
 #define log(level, fmt, ...)                                                   \
@@ -292,9 +300,9 @@ void _log_perror(int level, const char *filename, int line, const char *func,
   })
 #define log_perror_if_errno(level, expression)                                 \
   ({                                                                           \
-    if (unlikely(expression))                                                  \
-      _log_perror(level, __filename__, __LINE__, __func__, #expression,        \
-                  value_cast(expression, int));                                \
+    int _err = value_cast(expression, int);                                    \
+    if (unlikely(_err))                                                        \
+      _log_perror(level, __filename__, __LINE__, __func__, #expression, _err); \
   })
 
 #define log_perror_on_error_emerg(expression)                                  \
@@ -365,9 +373,10 @@ void _log_assert_perror_fail(const char *filename, int line, const char *func,
   })
 #define log_abort_if_errno(expression)                                         \
   ({                                                                           \
-    if (unlikely(expression))                                                  \
+    int _err = value_cast(expression, int);                                    \
+    if (unlikely(_err))                                                        \
       _log_assert_perror_fail(__filename__, __LINE__, __func__, #expression,   \
-                              value_cast(expression, int));                    \
+                              _err);                                           \
   })
 #ifndef NDEBUG
 #define log_assert(expression) log_abort_if_false(expression)
@@ -416,8 +425,9 @@ typedef u64 uint64_t;
 /* Base name of file */
 
 #define __filename__                                                           \
-  (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1     \
-                                    : __FILE__)
+  ((uintptr_t)__builtin_strrchr(__FILE__, '/')                                 \
+       ? __builtin_strrchr(__FILE__, '/') + 1                                  \
+       : __FILE__)
 
 /* Compatibility */
 
@@ -436,36 +446,85 @@ typedef u64 uint64_t;
 #define ERRNO(ret)                                                             \
   value_cast(({                                                                \
                typeof(ret) _ret = (ret);                                       \
-               IS_ERR(address_cast(_ret)) ? _ret : 0;                          \
+               IS_ERR(address_cast(_ret)) ? -_ret : 0;                         \
              }),                                                               \
              int)
 
 /* Log */
 
+#define LOG_EMERG 0
+#define LOG_ALERT 1
+#define LOG_CRIT 2
+#define LOG_ERR 3
+#define LOG_WARNING 4
+#define LOG_NOTICE 5
+#define LOG_INFO 6
+#define LOG_DEBUG 7
+
 #ifdef MODULE
-#define _KLOG_MSG(filename, line, func, fmt, ...)                              \
-  "%s[%d]: %s:%d: %s: " fmt "\n", THIS_MODULE->name, task_pid_vnr(current),    \
-      filename, line, func, ##__VA_ARGS__
+#define log(level, fmt, ...)                                                   \
+  ({                                                                           \
+    if (unlikely(log_enabled >= level))                                        \
+      printk(KERN_SOH STR_VAL(level) "%s[%d]: %s:%d: %s: " fmt "\n",           \
+             THIS_MODULE->name, task_pid_vnr(current), __filename__, __LINE__, \
+             __func__, ##__VA_ARGS__);                                         \
+  })
 #else
-#define _KLOG_MSG(filename, line, func, fmt, ...)                              \
-  "%s[%d]: %s:%d: %s: " fmt "\n", module_name(THIS_MODULE),                    \
-      task_pid_vnr(current), filename, line, func, ##__VA_ARGS__
+#define log(level, fmt, ...)                                                   \
+  ({                                                                           \
+    if (unlikely(log_enabled >= level))                                        \
+      printk(KERN_SOH STR_VAL(level) "kernel[%d]: %s:%d: %s: " fmt "\n",       \
+             task_pid_vnr(current), __filename__, __LINE__, __func__,          \
+             ##__VA_ARGS__);                                                   \
+  })
 #endif
-#define _KLOG_MSG_TMPL(fmt, ...)                                               \
-  _KLOG_MSG(__filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
-#define klog(level, fmt, ...) printk(level _KLOG_MSG_TMPL(fmt, ##__VA_ARGS__))
+#define log_emerg(fmt, ...) log(LOG_EMERG, fmt, ##__VA_ARGS__)
+#define log_alert(fmt, ...) log(LOG_ALERT, fmt, ##__VA_ARGS__)
+#define log_crit(fmt, ...) log(LOG_CRIT, fmt, ##__VA_ARGS__)
+#define log_err(fmt, ...) log(LOG_ERR, fmt, ##__VA_ARGS__)
+#define log_warning(fmt, ...) log(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_notice(fmt, ...) log(LOG_NOTICE, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...) log(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) log(LOG_DEBUG, fmt, ##__VA_ARGS__)
 
-#define _KLOG_DEV_MSG(pdev, filename, line, func, fmt, ...)                    \
-  "%s[%d] %04x:%02hhx:%02x.%x: %s:%d: %s: " fmt "\n", THIS_MODULE->name,       \
-      task_pid_vnr(current), pci_domain_nr(pdev->bus), pdev->bus->number,      \
-      PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), filename, line, func,      \
-      ##__VA_ARGS__
-#define _KLOG_DEV_MSG_TMPL(pdev, fmt, ...)                                     \
-  _KLOG_DEV_MSG(pdev, __filename__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#ifdef MODULE
+#define log_pci(pdev, level, fmt, ...)                                         \
+  ({                                                                           \
+    if (unlikely(log_enabled >= level))                                        \
+      printk(KERN_SOH STR_VAL(                                                 \
+                 level) "%s[%d] %04x:%02hhx:%02x.%x: %s:%d: %s: " fmt "\n",    \
+             THIS_MODULE->name, task_pid_vnr(current),                         \
+             pci_domain_nr(pdev->bus), pdev->bus->number,                      \
+             PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), __filename__,       \
+             __LINE__, __func__, ##__VA_ARGS__);                               \
+  })
+#else
+#define log_pci(pdev, level, fmt, ...)                                         \
+  ({                                                                           \
+    if (unlikely(log_enabled >= level))                                        \
+      printk(KERN_SOH STR_VAL(                                                 \
+                 level) "kernel[%d] %04x:%02hhx:%02x.%x: %s:%d: %s: " fmt      \
+                        "\n",                                                  \
+             task_pid_vnr(current), pci_domain_nr(pdev->bus),                  \
+             pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),  \
+             __filename__, __LINE__, __func__, ##__VA_ARGS__);                 \
+  })
+#endif
 
-#define klog_dev(pdev, level, fmt, ...)                                        \
-  printk(level _KLOG_DEV_MSG_TMPL(pdev, fmt, ##__VA_ARGS__))
+#define log_pci_emerg(pdev, fmt, ...)                                          \
+  log_pci(pdev, LOG_EMERG, fmt, ##__VA_ARGS__)
+#define log_pci_alert(pdev, fmt, ...)                                          \
+  log_pci(pdev, LOG_ALERT, fmt, ##__VA_ARGS__)
+#define log_pci_crit(pdev, fmt, ...) log_pci(pdev, LOG_CRIT, fmt, ##__VA_ARGS__)
+#define log_pci_err(pdev, fmt, ...) log_pci(pdev, LOG_ERR, fmt, ##__VA_ARGS__)
+#define log_pci_warning(pdev, fmt, ...)                                        \
+  log_pci(pdev, LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_pci_notice(pdev, fmt, ...)                                         \
+  log_pci(pdev, LOG_NOTICE, fmt, ##__VA_ARGS__)
+#define log_pci_info(pdev, fmt, ...) log_pci(pdev, LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_pci_debug(pdev, fmt, ...)                                          \
+  log_pci(pdev, LOG_DEBUG, fmt, ##__VA_ARGS__)
 
 #endif
 

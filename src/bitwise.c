@@ -92,13 +92,3 @@ int64_t x86_search_lowest_common_bit(const bitset64_t *__restrict bitset,
   }
   return -1;
 }
-
-#ifdef __KERNEL__
-EXPORT_SYMBOL(x86_test_bit);
-EXPORT_SYMBOL(x86_set_bit_nonatomic);
-EXPORT_SYMBOL(x86_unset_bit_nonatomic);
-EXPORT_SYMBOL(x86_set_bit_atomic);
-EXPORT_SYMBOL(x86_unset_bit_atomic);
-EXPORT_SYMBOL(x86_search_lowest_bit);
-EXPORT_SYMBOL(x86_search_lowest_common_bit);
-#endif
