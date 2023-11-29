@@ -3,6 +3,7 @@
 
 !.vscode/
 !.vscode/update.py
+!.vscode/_c_cpp_properties.json
 
 !LICENSE
 
