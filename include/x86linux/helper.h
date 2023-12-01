@@ -9,10 +9,12 @@
 /* [Userspace] BEGIN */
 
 #ifdef __cplusplus
+#include <cerrno>
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
 #else
+#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
@@ -45,6 +47,10 @@ extern "C" {
 
 #define STR(macro) #macro
 #define STR_VAL(macro) STR(macro)
+
+/* Swap */
+
+#define swap(p, q) (*p ^= *q ^= *p ^= *q) // non-atomic operation
 
 /* Casting */
 
@@ -367,9 +373,14 @@ void _log_assert_perror_fail(const char *filename, int line, const char *func,
   })
 #define log_abort_on_error(expression)                                         \
   ({                                                                           \
-    if (unlikely(value_cast(expression, int) == -1))                           \
+    int _err = errno;                                                          \
+    errno = 0;                                                                 \
+    (void)!(expression);                                                       \
+    if (unlikely(errno))                                                       \
       _log_assert_perror_fail(__filename__, __LINE__, __func__, #expression,   \
-                              -1);                                             \
+                              errno);                                          \
+    else                                                                       \
+      errno = _err;                                                            \
   })
 #define log_abort_if_errno(expression)                                         \
   ({                                                                           \
