@@ -48,9 +48,12 @@ extern "C" {
 #define STR(macro) #macro
 #define STR_VAL(macro) STR(macro)
 
-/* Swap */
+/* Non-atomic operations */
 
-#define swap(p, q) (*p ^= *q ^= *p ^= *q) // non-atomic operation
+#define swap(p, q) (*p ^= *q ^= *p ^= *q)
+
+#define max(a, b) (a > b ? a : b)
+#define min(a, b) (a > b ? b : a)
 
 /* Casting */
 
