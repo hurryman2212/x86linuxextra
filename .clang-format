@@ -1,0 +1,39 @@
+BasedOnStyle: LLVM
+IncludeBlocks: Regroup
+# Keep project headers last, including the source file's matching header.
+IncludeIsMainRegex: '$a'
+IncludeCategories:
+  # Generated headers come after every other include group.
+  - Regex: '^[<"]generated/'
+    Priority: 100
+  # Keep stdbool.h and threads.h in their own group.
+  - Regex: '^<(stdbool|threads)\.h>$'
+    Priority: 11
+  # ISO C and C++ standard library headers.
+  - Regex: '^<(assert|complex|ctype|errno|fenv|float|inttypes|iso646|limits|locale|math|setjmp|signal|std[a-z0-9_]*|string|tgmath|threads|time|uchar|wchar|wctype)\.h>$'
+    Priority: 10
+  - Regex: '^<(c[a-z]+|algorithm|any|array|atomic|barrier|bit|bitset|compare|complex|concepts|condition_variable|coroutine|deque|exception|execution|expected|filesystem|format|forward_list|fstream|functional|future|initializer_list|iomanip|ios|iosfwd|iostream|istream|iterator|latch|limits|list|locale|map|memory|memory_resource|mutex|new|numbers|numeric|optional|ostream|queue|random|ranges|ratio|regex|scoped_allocator|semaphore|set|source_location|span|spanstream|sstream|stack|stdexcept|stdfloat|stop_token|streambuf|string|string_view|strstream|syncstream|system_error|thread|tuple|type_traits|typeindex|typeinfo|unordered_map|unordered_set|utility|valarray|variant|vector|version)>$'
+    Priority: 10
+  # POSIX and other general system headers, then networking and sys/ interfaces.
+  - Regex: '^<(aio|dirent|dlfcn|endian|execinfo|fcntl|features|fnmatch|ftw|glob|grp|iconv|langinfo|link|malloc|monetary|mqueue|ndbm|netdb|nl_types|poll|pthread|pwd|regex|sched|search|semaphore|spawn|strings|stropts|syscall|syslog|tar|termios|ulimit|unistd|utime|utmpx|wordexp)\.h>$'
+    Priority: 20
+  - Regex: '^<((arpa|net|netinet)/|ifaddrs\.h>)'
+    Priority: 30
+  - Regex: '^<sys/'
+    Priority: 40
+  # Linux kernel and architecture ABI headers.
+  - Regex: '^<(linux|asm|asm-generic)/'
+    Priority: 50
+  # CPU-specific compiler intrinsics.
+  - Regex: '^<(cpuid|[a-z0-9_]*intrin)\.h>$'
+    Priority: 55
+  # Other angle-bracket headers are external libraries.
+  - Regex: '^<'
+    Priority: 60
+  # Project headers: parent paths, current directory, then subdirectories.
+  - Regex: '^"(\.\./)+'
+    Priority: 70
+  - Regex: '^"(\./)?[^/]+"$'
+    Priority: 80
+  - Regex: '^"'
+    Priority: 90

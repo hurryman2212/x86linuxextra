@@ -1,0 +1,9 @@
+CompileFlags:
+  Add: -Wno-unknown-warning-option
+
+---
+# Kernel headers need their parsing and ABI flags, including -fms-extensions.
+If:
+  PathExclude: module/.*
+CompileFlags:
+  Remove: [-m*, -f*]
